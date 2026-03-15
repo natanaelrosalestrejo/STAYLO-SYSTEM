@@ -5,7 +5,8 @@ import pytest
 import requests
 import os
 
-BASE_URL = "https://hospitality-hub-100.preview.emergentagent.com"
+# Use env for local/CI; fallback was a fixed Emergent preview URL (caused 404 when run against local backend).
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8000").rstrip("/")
 
 def login(email, password):
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": email, "password": password})

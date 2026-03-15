@@ -28,9 +28,17 @@ class TestRoomsCRUD:
     created_room_id = None
 
     def test_create_room(self, admin_token):
+        # Clean up room TEST999 from a previous run so create does not get 400 and count stays 40 for other tests
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        list_r = requests.get(f"{BASE_URL}/api/rooms", headers=headers)
+        if list_r.status_code == 200:
+            for room in list_r.json():
+                if room.get("number") == "TEST999":
+                    requests.delete(f"{BASE_URL}/api/rooms/{room['id']}", headers=headers)
+                    break
         r = requests.post(f"{BASE_URL}/api/rooms",
             json={"number": "TEST999", "type": "suite", "floor": 4, "price_per_night": 2500, "capacity": 2, "amenities": ["WiFi"]},
-            headers={"Authorization": f"Bearer {admin_token}"})
+            headers=headers)
         assert r.status_code == 200
         data = r.json()
         assert data["number"] == "TEST999"

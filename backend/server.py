@@ -1,14 +1,22 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
-from fastapi.security import OAuth2PasswordBearer
 from starlette.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
 import logging, uuid, json, re, random, asyncio
 from pathlib import Path
-from passlib.context import CryptContext
-from jose import JWTError, jwt
 import resend
+
+from auth import (
+    create_token,
+    get_current_user,
+    hash_password,
+    require_role,
+    verify_password,
+    _allowed_property_ids,
+    _ensure_guest_in_scope,
+    _ensure_reservation_in_scope,
+    _ensure_room_in_scope,
+)
 
 # Optional: emergentintegrations (LLM + Stripe) — only available in Emergent; app runs locally without it.
 try:
@@ -30,19 +38,55 @@ if LlmChat is None or StripeCheckout is None:
     )
 
 from config import (
-    ALGORITHM,
     CORS_ORIGINS_LIST,
     EMERGENT_LLM_KEY,
     EXTRAS_CATALOG,
     HOTEL_NOTIFICATION_EMAIL,
     RESEND_API_KEY,
-    SECRET_KEY,
     SENDER_EMAIL,
     STRIPE_API_KEY,
     STRIPE_WEBHOOK_SECRET,
-    TOKEN_EXPIRE_MINUTES,
 )
 from db import client, db
+from models import (
+    DEFAULT_ROLE_PERMISSIONS,
+    AmenityCreate,
+    AmenityModel,
+    EventBookingCreate,
+    EventBookingModel,
+    EventSpaceCreate,
+    EventSpaceModel,
+    ExtrasRequest,
+    GuestCreate,
+    GuestModel,
+    HotelSpaceCreate,
+    HotelSpaceModel,
+    LoginRequest,
+    MessageCreate,
+    MessageModel,
+    PendingBookingModel,
+    PaymentTransactionModel,
+    PropertyCreate,
+    PropertyModel,
+    PublicBookingCreate,
+    ReservationCreate,
+    ReservationModel,
+    RolePermissionUpdate,
+    RoomCreate,
+    RoomModel,
+    RoomUpdate,
+    RoomTypeCreate,
+    RoomTypeModel,
+    TaskCreate,
+    TaskModel,
+    TenantCreate,
+    TenantModel,
+    UserCreate,
+    UserModel,
+    UserResponse,
+    UserUpdate,
+)
+from seeds import COLORS, DEMO_PROPERTY_ID, run_all
 from services.scoring import calculate_garden_score, calculate_hotel_score
 
 # Email security: API key must come ONLY from environment variable — never hardcoded
@@ -52,613 +96,10 @@ if RESEND_API_KEY:
 else:
     logging.warning("RESEND_API_KEY not set. Email sending disabled. Reservation creation will still succeed.")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
-
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
 
-# ====================== MODELS ======================
-
-class UserModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str; email: str; password_hash: str; role: str
-    admin_type: Optional[str] = None        # platform_admin | platform_support | billing_admin | technical_admin | hotel_admin
-    staff_subtype: Optional[str] = None     # recepcion | limpieza | mantenimiento | seguridad | restaurante
-    department: Optional[str] = None; phone: Optional[str] = None
-    is_active: bool = True; avatar_color: str = "#059669"
-    custom_permissions: Optional[List[str]] = None
-    property_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class UserCreate(BaseModel):
-    name: str; email: str; password: str; role: str
-    admin_type: Optional[str] = None
-    staff_subtype: Optional[str] = None
-    department: Optional[str] = None; phone: Optional[str] = None
-    custom_permissions: Optional[List[str]] = None
-    property_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None; email: Optional[str] = None; role: Optional[str] = None
-    admin_type: Optional[str] = None
-    staff_subtype: Optional[str] = None
-    department: Optional[str] = None; phone: Optional[str] = None
-    is_active: Optional[bool] = None; custom_permissions: Optional[List[str]] = None
-    property_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    password: Optional[str] = None
-
-class UserResponse(BaseModel):
-    id: str; name: str; email: str; role: str; department: Optional[str] = None
-    phone: Optional[str] = None; is_active: bool; avatar_color: str; created_at: str
-    custom_permissions: Optional[List[str]] = None
-    admin_type: Optional[str] = None
-    staff_subtype: Optional[str] = None
-    property_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-
-class RoomModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    number: str; type: str; floor: int; status: str = "available"
-    amenities: List[str] = []; price_per_night: float; capacity: int = 2
-    description: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class RoomCreate(BaseModel):
-    number: str; type: str; floor: int; amenities: List[str] = []
-    price_per_night: float; capacity: int = 2; description: Optional[str] = None
-
-class RoomUpdate(BaseModel):
-    number: Optional[str] = None; type: Optional[str] = None; floor: Optional[int] = None
-    status: Optional[str] = None; amenities: Optional[List[str]] = None
-    price_per_night: Optional[float] = None; capacity: Optional[int] = None
-    description: Optional[str] = None
-
-class GuestModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    first_name: str; last_name: str; email: Optional[str] = None; phone: Optional[str] = None
-    id_number: Optional[str] = None; nationality: Optional[str] = None
-    address: Optional[str] = None; notes: Optional[str] = None
-    is_vip: bool = False
-    preferred_room_type: Optional[str] = None
-    internal_notes: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class GuestCreate(BaseModel):
-    first_name: str; last_name: str; email: Optional[str] = None; phone: Optional[str] = None
-    id_number: Optional[str] = None; nationality: Optional[str] = None
-    address: Optional[str] = None; notes: Optional[str] = None
-    is_vip: bool = False; preferred_room_type: Optional[str] = None; internal_notes: Optional[str] = None
-
-class ReservationModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    guest_id: str; guest_name: str; room_id: str; room_number: str
-    check_in_date: str; check_out_date: str; status: str = "confirmed"
-    total_amount: float; adults: int = 1; children: int = 0
-    notes: Optional[str] = None; created_by: str
-    payment_status: str = "paid"
-    payment_source: str = "internal"
-    reservation_source: str = "reception"  # web | reception | whatsapp | other
-    event_name: Optional[str] = None
-    property_id: str = "alma_hotel"
-    property_type: str = "hotel"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class ReservationCreate(BaseModel):
-    guest_id: str; room_id: str; check_in_date: str; check_out_date: str
-    adults: int = 1; children: int = 0; notes: Optional[str] = None
-    reservation_source: str = "reception"
-
-class MessageModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    thread_id: str; sender_id: str; sender_name: str
-    receiver_id: str; receiver_name: str; subject: Optional[str] = None
-    content: str; message_type: str = "staff_to_staff"
-    is_read: bool = False; is_reply: bool = False; parent_id: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class MessageCreate(BaseModel):
-    receiver_id: str; subject: Optional[str] = None; content: str
-    message_type: str = "staff_to_staff"
-    thread_id: Optional[str] = None; parent_id: Optional[str] = None
-
-class TaskModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    title: str; description: Optional[str] = None
-    assigned_to: Optional[str] = None; assigned_to_name: Optional[str] = None
-    assigned_by: str; assigned_by_name: str
-    room_id: Optional[str] = None; room_number: Optional[str] = None
-    priority: str = "medium"; status: str = "pending"; category: str = "general"
-    due_date: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class TaskCreate(BaseModel):
-    title: str; description: Optional[str] = None; assigned_to: Optional[str] = None
-    room_id: Optional[str] = None; priority: str = "medium"
-    category: str = "general"; due_date: Optional[str] = None
-
-# --- PUBLIC BOOKING MODELS ---
-class ExtrasRequest(BaseModel):
-    desayuno: bool = False
-    early_checkin: bool = False
-    late_checkout: bool = False
-
-# Multi-property models
-class PropertyModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str; type: str = "hotel"  # hotel | event_garden
-    status: str = "active"  # active | inactive
-    description: Optional[str] = None
-    address: Optional[str] = None
-    tenant_id: Optional[str] = None
-    feature_toggles: dict = Field(default_factory=lambda: {
-        "inbox": True, "tasks": True, "catalog": True,
-        "public_booking": True, "advanced_reports": True
-    })
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class PropertyCreate(BaseModel):
-    name: str; type: str = "hotel"; status: str = "active"
-    description: Optional[str] = None; address: Optional[str] = None
-    tenant_id: Optional[str] = None
-
-class EventSpaceModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    property_id: str; space_name: str; capacity: int; status: str = "available"
-    description: Optional[str] = None; price_per_event: Optional[float] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class EventSpaceCreate(BaseModel):
-    property_id: str; space_name: str; capacity: int; status: str = "available"
-    description: Optional[str] = None; price_per_event: Optional[float] = None
-
-class HotelSpaceModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    property_id: str
-    space_name: str
-    space_type: str = "general"   # salon | conference | rooftop | terrace | pool | general
-    capacity: int = 0
-    status: str = "available"
-    description: Optional[str] = None
-    price_per_event: Optional[float] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class HotelSpaceCreate(BaseModel):
-    property_id: str
-    space_name: str
-    space_type: str = "general"
-    capacity: int = 0
-    status: str = "available"
-    description: Optional[str] = None
-    price_per_event: Optional[float] = None
-
-class EventBookingModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    property_id: str; event_space_id: str; event_space_name: str
-    client_name: str; client_email: Optional[str] = None; client_phone: Optional[str] = None
-    event_date: str; event_type: str  # wedding | corporate | birthday | social | other
-    attendees: int = 0; total_price: float = 0.0
-    booking_status: str = "confirmed"  # confirmed | pending | cancelled
-    payment_status: str = "pending"  # pending | paid
-    notes: Optional[str] = None
-    reservation_source: str = "reception"
-    created_by: str = "admin"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class EventBookingCreate(BaseModel):
-    property_id: str; event_space_id: str; client_name: str
-    client_email: Optional[str] = None; client_phone: Optional[str] = None
-    event_date: str; event_type: str; attendees: int = 0; total_price: float = 0.0
-    booking_status: str = "confirmed"; notes: Optional[str] = None
-    reservation_source: str = "reception"
-
-# Multi-tenant + SaaS models
-class TenantModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    description: Optional[str] = None
-    status: str = "active"          # legacy compat: active | inactive | suspended
-    contact_email: Optional[str] = None
-    plan: str = "standard"          # standard | premium | enterprise
-    # SaaS billing fields
-    plan_price: Optional[float] = None          # Custom monthly fee (overrides plan default)
-    billing_status: Optional[str] = None        # Al corriente | Próximo a vencer | Vencido
-    next_billing_date: Optional[str] = None     # ISO date string
-    tenant_status: str = "Activo"               # Activo | Suspendido | Inactivo | En gracia
-    internal_notes: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class TenantCreate(BaseModel):
-    name: str; description: Optional[str] = None; status: str = "active"
-    contact_email: Optional[str] = None; plan: str = "standard"
-    plan_price: Optional[float] = None
-    billing_status: Optional[str] = None
-    next_billing_date: Optional[str] = None
-    tenant_status: str = "Activo"
-    internal_notes: Optional[str] = None
-
-class RoomTypeModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str; description: Optional[str] = None
-    base_price: float = 0.0; capacity: int = 2
-    amenities: List[str] = []; images: List[str] = []
-    property_id: Optional[str] = None; tenant_id: Optional[str] = None
-    status: str = "active"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class RoomTypeCreate(BaseModel):
-    name: str; description: Optional[str] = None
-    base_price: float = 0.0; capacity: int = 2
-    amenities: List[str] = []; images: List[str] = []
-    property_id: Optional[str] = None; tenant_id: Optional[str] = None
-
-class AmenityModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    category: str = "general"
-    icon: Optional[str] = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class AmenityCreate(BaseModel):
-    name: str; category: str = "general"; icon: Optional[str] = None
-
-# Role Permissions
-DEFAULT_ROLE_PERMISSIONS = {
-    "admin": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog", "reports", "staff", "properties"],
-    "owner": ["corporate", "hotels", "event-gardens", "reports"],
-    "receptionist": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog"],
-    "housekeeping": ["inbox", "tasks"],
-    "maintenance": ["inbox", "tasks"],
-    "security": ["inbox", "tasks"],
-    "restaurant": ["inbox", "tasks"],
-}
-
-class RolePermissionUpdate(BaseModel):
-    modules: List[str]
-
-class PublicBookingCreate(BaseModel):
-    check_in_date: str
-    check_out_date: str
-    adults: int = 2
-    children: int = 0
-    room_type: str
-    extras: ExtrasRequest = ExtrasRequest()
-    first_name: str
-    last_name: str
-    email: str
-    phone: str
-    id_number: Optional[str] = None
-    event_name: Optional[str] = None
-    payment_method: str = "at_hotel"
-    special_requests: Optional[str] = None
-
-class PendingBookingModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    check_in_date: str; check_out_date: str
-    adults: int; children: int; room_type: str
-    extras: dict = {}
-    first_name: str; last_name: str; email: str; phone: str
-    id_number: Optional[str] = None
-    special_requests: Optional[str] = None
-    total_amount: float; nights: int
-    status: str = "pending"
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-class PaymentTransactionModel(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    session_id: str; booking_id: Optional[str] = None
-    amount: float; currency: str = "mxn"
-    payment_status: str = "initiated"
-    metadata: dict = {}
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
-
-# ====================== AUTH ======================
-
-def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
-def hash_password(pw): return pwd_context.hash(pw)
-
-def create_token(data: dict):
-    to_encode = data.copy()
-    to_encode["exp"] = datetime.now(timezone.utc) + timedelta(minutes=TOKEN_EXPIRE_MINUTES)
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id: raise HTTPException(status_code=401, detail="Token inválido")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token inválido")
-    user = await db.users.find_one({"id": user_id}, {"_id": 0})
-    if not user: raise HTTPException(status_code=401, detail="Usuario no encontrado")
-    user_obj = UserModel(**user)
-    # Tenant suspension check (non-platform users with tenant_id assigned)
-    if user_obj.role != 'platform_admin' and user_obj.tenant_id:
-        tenant = await db.tenants.find_one({"id": user_obj.tenant_id}, {"_id": 0, "tenant_status": 1, "status": 1})
-        if tenant and (tenant.get('tenant_status') == 'Suspendido' or tenant.get('status') == 'suspended'):
-            raise HTTPException(status_code=403, detail="Cuenta suspendida. Contacte al administrador.")
-    return user_obj
-
-def require_role(*roles):
-    async def checker(current_user: UserModel = Depends(get_current_user)):
-        if current_user.role not in roles:
-            raise HTTPException(status_code=403, detail="Sin permisos suficientes")
-        return current_user
-    return checker
-
-async def _allowed_property_ids(current_user: UserModel):
-    """Return None for global visibility (platform_admin), else list of property ids the user may access."""
-    if current_user.role == "platform_admin":
-        return None
-    if current_user.property_id:
-        return [current_user.property_id]
-    if current_user.tenant_id:
-        props = await db.properties.find({"tenant_id": current_user.tenant_id}, {"id": 1}).to_list(100)
-        return [p["id"] for p in props]
-    return []
-
-async def _ensure_room_in_scope(room: dict, current_user: UserModel) -> None:
-    """Raise 404 if room is not in current_user's property/tenant scope."""
-    allowed = await _allowed_property_ids(current_user)
-    if allowed is None:
-        return
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Habitación no encontrada")
-    if room.get("property_id") not in allowed:
-        raise HTTPException(status_code=404, detail="Habitación no encontrada")
-
-async def _ensure_reservation_in_scope(res: dict, current_user: UserModel) -> None:
-    """Raise 404 if reservation is not in current_user's property/tenant scope."""
-    allowed = await _allowed_property_ids(current_user)
-    if allowed is None:
-        return
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Reserva no encontrada")
-    if res.get("property_id") not in allowed:
-        raise HTTPException(status_code=404, detail="Reserva no encontrada")
-
-async def _ensure_guest_in_scope(guest_id: str, current_user: UserModel) -> None:
-    """Raise 404 if guest is not in scope (no reservation in allowed properties)."""
-    allowed = await _allowed_property_ids(current_user)
-    if allowed is None:
-        return
-    if not allowed:
-        raise HTTPException(status_code=404, detail="Huésped no encontrado")
-    n = await db.reservations.count_documents({"guest_id": guest_id, "property_id": {"$in": allowed}})
-    if n == 0:
-        raise HTTPException(status_code=404, detail="Huésped no encontrado")
-
-# ====================== SEED ======================
-
-COLORS = ["#059669", "#3B82F6", "#D97706", "#EF4444", "#8B5CF6", "#EC4899"]
-
-async def seed_data():
-    if await db.users.count_documents({}) > 0: return
-    users = [
-        UserModel(name="Admin Hotel", email="admin@hotel.com", password_hash=hash_password("admin123"), role="admin", department="Administración", avatar_color="#059669"),
-        UserModel(name="María García", email="maria@hotel.com", password_hash=hash_password("recep123"), role="receptionist", department="Recepción", avatar_color="#3B82F6"),
-        UserModel(name="Carlos López", email="carlos@hotel.com", password_hash=hash_password("house123"), role="housekeeping", department="Housekeeping", avatar_color="#D97706"),
-        UserModel(name="Ana Martínez", email="ana@hotel.com", password_hash=hash_password("maint123"), role="maintenance", department="Mantenimiento", avatar_color="#EF4444"),
-        UserModel(name="Director General", email="owner@hotel.com", password_hash=hash_password("owner123"), role="owner", department="Dirección", avatar_color="#8B5CF6"),
-        UserModel(name="Platform Admin", email="platform@almasystem.com", password_hash=hash_password("platform123"), role="platform_admin", department="Platform", avatar_color="#1e293b"),
-    ]
-    for u in users: await db.users.insert_one(u.model_dump())
-
-    double_amenities = ["WiFi", "TV", "Aire Acondicionado", "2 Camas Queen", "Baño Privado", "Regadera de Lluvia", "Caja de Seguridad", "Amenidades de Baño", "Secador de Cabello"]
-    suite_amenities = ["WiFi", "TV", "Aire Acondicionado", "Cama King Size", "Sofá Cama", "Vestidor", "Doble Lavabo", "Regadera de Lluvia", "Amenidades de Baño", "Secador de Cabello"]
-    junior_suite_rooms = {5, 15, 25, 35}
-
-    room_data = []
-    for num in range(1, 41):
-        floor = (num - 1) // 10 + 1
-        is_suite = num in junior_suite_rooms
-        room_data.append((str(num), "junior_suite" if is_suite else "double", floor, 2500 if is_suite else 1500, 2 if is_suite else 4, suite_amenities if is_suite else double_amenities))
-
-    rooms = []
-    for r in room_data:
-        room = RoomModel(number=r[0], type=r[1], floor=r[2], price_per_night=r[3], capacity=r[4], amenities=r[5])
-        await db.rooms.insert_one(room.model_dump())
-        rooms.append(room)
-
-    guests_data = [
-        GuestModel(first_name="Juan", last_name="Pérez", email="juan@gmail.com", phone="+34 612 345 678", nationality="España", id_number="12345678A"),
-        GuestModel(first_name="Sophie", last_name="Martin", email="sophie@gmail.com", phone="+33 6 12 34 56 78", nationality="Francia", id_number="FR123456"),
-        GuestModel(first_name="James", last_name="Wilson", email="james@gmail.com", phone="+1 555 234 5678", nationality="EE.UU.", id_number="US789012"),
-        GuestModel(first_name="Isabella", last_name="Ferrari", email="isabella@gmail.com", phone="+39 347 123 4567", nationality="Italia"),
-    ]
-    guests = []
-    for g in guests_data:
-        await db.guests.insert_one(g.model_dump())
-        guests.append(g)
-
-    from datetime import date, timedelta as td
-    today = date.today().strftime("%Y-%m-%d")
-    tomorrow = (date.today() + td(days=1)).strftime("%Y-%m-%d")
-    next_week = (date.today() + td(days=7)).strftime("%Y-%m-%d")
-    two_days_ago = (date.today() - td(days=2)).strftime("%Y-%m-%d")
-
-    reservations = [
-        ReservationModel(guest_id=guests[0].id, guest_name="Juan Pérez", room_id=rooms[1].id, room_number="2", check_in_date=today, check_out_date=next_week, status="checked_in", total_amount=10500, adults=2, created_by=users[1].id),
-        ReservationModel(guest_id=guests[1].id, guest_name="Sophie Martin", room_id=rooms[14].id, room_number="15", check_in_date=tomorrow, check_out_date=next_week, status="confirmed", total_amount=15000, adults=2, children=1, created_by=users[1].id),
-        ReservationModel(guest_id=guests[2].id, guest_name="James Wilson", room_id=rooms[5].id, room_number="6", check_in_date=two_days_ago, check_out_date=today, status="checked_out", total_amount=3000, adults=1, created_by=users[1].id),
-        ReservationModel(guest_id=guests[3].id, guest_name="Isabella Ferrari", room_id=rooms[11].id, room_number="12", check_in_date=today, check_out_date=tomorrow, status="confirmed", total_amount=1500, adults=2, created_by=users[1].id),
-    ]
-    for r in reservations: await db.reservations.insert_one(r.model_dump())
-    await db.rooms.update_one({"id": rooms[1].id}, {"$set": {"status": "occupied"}})
-    await db.rooms.update_one({"id": rooms[3].id}, {"$set": {"status": "reserved"}})
-    await db.rooms.update_one({"id": rooms[4].id}, {"$set": {"status": "cleaning"}})
-    await db.rooms.update_one({"id": rooms[6].id}, {"$set": {"status": "reserved"}})
-
-    admin = users[0]
-    tasks = [
-        TaskModel(title="Limpiar habitación 305", description="Limpieza profunda post check-out", assigned_to=users[2].id, assigned_to_name=users[2].name, assigned_by=admin.id, assigned_by_name=admin.name, room_id=rooms[14].id, room_number="305", priority="high", status="pending", category="housekeeping"),
-        TaskModel(title="Revisar AC habitación 204", description="Huésped reportó problemas con el aire acondicionado", assigned_to=users[3].id, assigned_to_name=users[3].name, assigned_by=admin.id, assigned_by_name=admin.name, room_id=rooms[8].id, room_number="204", priority="urgent", status="in_progress", category="maintenance"),
-        TaskModel(title="Preparar bienvenida VIP suite 104", description="Bouquet de flores y champagne para Sophie Martin", assigned_to=users[1].id, assigned_to_name=users[1].name, assigned_by=admin.id, assigned_by_name=admin.name, room_id=rooms[3].id, room_number="104", priority="high", status="pending", category="reception"),
-    ]
-    for t in tasks: await db.tasks.insert_one(t.model_dump())
-
-    thread1 = str(uuid.uuid4())
-    thread2 = str(uuid.uuid4())
-    thread3 = str(uuid.uuid4())
-    msgs = [
-        MessageModel(thread_id=thread1, sender_id=users[1].id, sender_name=users[1].name, receiver_id=admin.id, receiver_name=admin.name, subject="Solicitud upgrade suite 104", content="Hola, el huésped Sophie Martin llega mañana a la suite 104. ¿Podemos prepararle una bienvenida especial con champagne y flores?", message_type="staff_to_staff"),
-        MessageModel(thread_id=thread2, sender_id=users[2].id, sender_name=users[2].name, receiver_id=admin.id, receiver_name=admin.name, subject="Habitaciones listas", content="Las habitaciones 101, 103 y 205 ya están limpias y listas para recibir huéspedes. Continúo con la 305.", message_type="staff_to_staff"),
-        MessageModel(thread_id=thread3, sender_id=admin.id, sender_name=admin.name, receiver_id=guests[0].id, receiver_name="Juan Pérez", subject="Bienvenido al Hotel", content="Estimado Juan, bienvenido a nuestro hotel. Esperamos que su estancia sea perfecta. No dude en contactarnos para cualquier necesidad.", message_type="staff_to_guest"),
-    ]
-    for m in msgs: await db.messages.insert_one(m.model_dump())
-
-async def seed_properties():
-    """Seed initial properties and event spaces — runs independently from seed_data."""
-    if await db.properties.count_documents({}) > 0:
-        return
-    hotel_prop = PropertyModel(
-        name="Alma Hotel Boutique", type="hotel", status="active",
-        description="Hotel boutique de lujo — 40 habitaciones")
-    garden_prop = PropertyModel(
-        name="Jardín de Amargati", type="event_garden", status="active",
-        description="Jardín de eventos con capacidad para 500 personas")
-    await db.properties.insert_one(hotel_prop.model_dump())
-    await db.properties.insert_one(garden_prop.model_dump())
-
-    spaces = [
-        EventSpaceModel(property_id=garden_prop.id, space_name="Jardín Principal",
-                        capacity=500, price_per_event=50000.0,
-                        description="Jardín amplio con iluminación y sistema de sonido profesional"),
-        EventSpaceModel(property_id=garden_prop.id, space_name="Salón de Eventos",
-                        capacity=200, price_per_event=30000.0,
-                        description="Salón climatizado para ceremonias y recepciones"),
-        EventSpaceModel(property_id=garden_prop.id, space_name="Terraza VIP",
-                        capacity=80, price_per_event=15000.0,
-                        description="Terraza exclusiva con vista panorámica"),
-    ]
-    for s in spaces:
-        await db.event_spaces.insert_one(s.model_dump())
-
-    # Seed sample event bookings for demo
-    from datetime import date, timedelta as td
-    today_d = date.today()
-    sample_bookings = [
-        EventBookingModel(
-            property_id=garden_prop.id, event_space_id=spaces[0].id,
-            event_space_name=spaces[0].space_name, client_name="Familia Rodríguez",
-            client_email="rodriguezboda@gmail.com", client_phone="+52 55 1234 5678",
-            event_date=(today_d + td(days=15)).isoformat(), event_type="wedding",
-            attendees=350, total_price=85000.0, booking_status="confirmed",
-            payment_status="pending", notes="Boda con decoración floral, necesitan servicio de catering"),
-        EventBookingModel(
-            property_id=garden_prop.id, event_space_id=spaces[1].id,
-            event_space_name=spaces[1].space_name, client_name="Empresa Innovatec S.A.",
-            client_email="eventos@innovatec.mx", client_phone="+52 55 9876 5432",
-            event_date=(today_d + td(days=5)).isoformat(), event_type="corporate",
-            attendees=120, total_price=42000.0, booking_status="confirmed",
-            payment_status="paid", notes="Presentación anual de resultados"),
-        EventBookingModel(
-            property_id=garden_prop.id, event_space_id=spaces[2].id,
-            event_space_name=spaces[2].space_name, client_name="Lucía Fernández",
-            client_email="lucia@gmail.com", client_phone="+52 55 5555 1234",
-            event_date=(today_d - td(days=10)).isoformat(), event_type="birthday",
-            attendees=60, total_price=18000.0, booking_status="confirmed",
-            payment_status="paid", notes="Quinceañera — decoración rosa y dorado"),
-    ]
-    for b in sample_bookings:
-        await db.event_bookings.insert_one(b.model_dump())
-
-async def seed_owner():
-    """Seed owner user for existing databases that don't have one yet."""
-    if await db.users.count_documents({"role": "owner"}) > 0:
-        return
-    owner = UserModel(
-        name="Director General", email="owner@hotel.com",
-        password_hash=hash_password("owner123"), role="owner",
-        department="Dirección", avatar_color="#8B5CF6")
-    await db.users.insert_one(owner.model_dump())
-
-async def seed_platform_admin():
-    """Seed platform admin for existing databases."""
-    if await db.users.count_documents({"role": "platform_admin"}) > 0:
-        return
-    padmin = UserModel(
-        name="Platform Admin", email="platform@almasystem.com",
-        password_hash=hash_password("platform123"), role="platform_admin",
-        department="Platform", avatar_color="#1e293b")
-    await db.users.insert_one(padmin.model_dump())
-
-async def seed_tenants():
-    """Seed initial tenant and assign existing properties to it."""
-    if await db.tenants.count_documents({}) > 0:
-        return
-    tenant = TenantModel(
-        name="Alma Hospitality Group",
-        description="Grupo hotelero principal — Alma Hotel Boutique y Jardín de Amargati",
-        status="active", contact_email="admin@almahotel.com", plan="enterprise")
-    await db.tenants.insert_one(tenant.model_dump())
-    # Assign all existing properties to this tenant
-    await db.properties.update_many({"tenant_id": None}, {"$set": {"tenant_id": tenant.id}})
-
-async def seed_room_types():
-    """Seed default room types catalog."""
-    if await db.room_types.count_documents({}) > 0:
-        return
-    std = ["wifi", "tv", "private_bathroom", "shower", "safe_box"]
-    types = [
-        RoomTypeModel(name="Estándar", description="Habitación estándar con todas las comodidades esenciales.",
-                      base_price=850.0, capacity=2, amenities=std, status="active"),
-        RoomTypeModel(name="Deluxe", description="Habitación deluxe con minibar y vista al jardín.",
-                      base_price=1350.0, capacity=2, amenities=std + ["minibar", "air_conditioning"], status="active"),
-        RoomTypeModel(name="Junior Suite", description="Suite con sala de estar, balcón y amenidades premium.",
-                      base_price=2100.0, capacity=3,
-                      amenities=std + ["minibar", "balcony", "sofa_bed", "air_conditioning"], status="active"),
-        RoomTypeModel(name="Suite Master", description="Suite de lujo con jacuzzi, terraza privada y servicio VIP.",
-                      base_price=3500.0, capacity=4,
-                      amenities=std + ["minibar", "balcony", "jacuzzi", "sofa_bed", "air_conditioning", "coffee_maker"],
-                      status="active"),
-    ]
-    for t in types:
-        await db.room_types.insert_one(t.model_dump())
-
-async def seed_amenities():
-    """Seed default amenities catalog."""
-    if await db.amenities.count_documents({}) > 0:
-        return
-    amenities_data = [
-        # Connectivity
-        AmenityModel(name="WiFi", category="connectivity", icon="wifi", id="wifi"),
-        AmenityModel(name="Smart TV", category="entertainment", icon="tv", id="tv"),
-        # Climate
-        AmenityModel(name="Aire Acondicionado", category="climate", icon="wind", id="air_conditioning"),
-        AmenityModel(name="Calefacción", category="climate", icon="flame", id="heating"),
-        # Bathroom
-        AmenityModel(name="Baño Privado", category="bathroom", icon="bath", id="private_bathroom"),
-        AmenityModel(name="Ducha", category="bathroom", icon="droplets", id="shower"),
-        AmenityModel(name="Bañera", category="bathroom", icon="bath", id="bathtub"),
-        AmenityModel(name="Jacuzzi", category="bathroom", icon="waves", id="jacuzzi"),
-        AmenityModel(name="Secador de Cabello", category="bathroom", icon="wind", id="hair_dryer"),
-        AmenityModel(name="Artículos de Tocador", category="bathroom", icon="sparkles", id="toiletries"),
-        # Room
-        AmenityModel(name="Caja Fuerte", category="security", icon="lock", id="safe_box"),
-        AmenityModel(name="Minibar", category="food", icon="glass-water", id="minibar"),
-        AmenityModel(name="Cafetera", category="food", icon="coffee", id="coffee_maker"),
-        AmenityModel(name="Sofá Cama", category="sleeping", icon="sofa", id="sofa_bed"),
-        # View / Space
-        AmenityModel(name="Balcón", category="outdoor", icon="building", id="balcony"),
-        AmenityModel(name="Terraza Privada", category="outdoor", icon="trees", id="private_terrace"),
-        AmenityModel(name="Vista al Mar", category="view", icon="waves", id="sea_view"),
-        AmenityModel(name="Vista al Jardín", category="view", icon="leaf", id="garden_view"),
-        # Services
-        AmenityModel(name="Servicio de Habitación", category="service", icon="concierge-bell", id="room_service"),
-        AmenityModel(name="Estacionamiento", category="service", icon="car", id="parking"),
-    ]
-    for a in amenities_data:
-        await db.amenities.insert_one(a.model_dump())
-
 # ====================== ROUTES ======================
-
-class LoginRequest(BaseModel):
-    email: str; password: str
 
 @api_router.post("/auth/login")
 async def login(data: LoginRequest):
@@ -765,6 +206,7 @@ async def create_room(data: RoomCreate, current_user: UserModel = Depends(get_cu
     if allowed is not None:
         room_doc["property_id"] = current_user.property_id or allowed[0]
     await db.rooms.insert_one(room_doc)
+    room_doc.pop("_id", None)  # PyMongo adds _id in place; remove so response is JSON-serializable
     return room_doc
 
 @api_router.put("/rooms/{room_id}")
@@ -863,7 +305,7 @@ async def create_reservation(data: ReservationCreate, current_user: UserModel = 
     nights = (check_out - check_in).days
     if nights <= 0: raise HTTPException(status_code=400, detail="Fechas inválidas")
     allowed = await _allowed_property_ids(current_user)
-    property_id = room.get("property_id") or (allowed[0] if allowed else "alma_hotel")
+    property_id = room.get("property_id") or (allowed[0] if allowed else DEMO_PROPERTY_ID)
     reservation = ReservationModel(
         guest_id=data.guest_id, guest_name=f"{guest['first_name']} {guest['last_name']}",
         room_id=data.room_id, room_number=room["number"],
@@ -1363,6 +805,14 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
     total_month_revenue = hotel_revenue_month + event_revenue_month
     total_last_month_revenue = hotel_last_month_revenue + event_last_month_revenue
     expected_total_revenue = expected_hotel_revenue + expected_event_revenue
+    today_arrivals = await db.reservations.count_documents({
+        "check_in_date": today_str,
+        "status": {"$in": ["confirmed", "checked_in"]},
+    })
+    today_departures = await db.reservations.count_documents({
+        "check_out_date": today_str,
+        "status": {"$in": ["confirmed", "checked_in"]},
+    })
 
     revenue_growth_pct = 0.0
     if total_last_month_revenue > 0:
@@ -1461,6 +911,8 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
             "pending_payments": hotel_pending_pay + event_pending_pay,
             "total_staff": total_staff,
             "revenue_opportunity": revenue_opportunity,
+            "today_arrivals": today_arrivals,
+            "today_departures": today_departures,
         },
         "revenue_intelligence": {
             "projected_month_revenue": projected_month_revenue,
@@ -2088,13 +1540,7 @@ async def update_features(prop_id: str, features: dict, current_user: UserModel 
 
 @app.on_event("startup")
 async def startup():
-    await seed_data()
-    await seed_properties()
-    await seed_owner()
-    await seed_platform_admin()
-    await seed_tenants()
-    await seed_room_types()
-    await seed_amenities()
+    await run_all()
 
 @app.on_event("shutdown")
 async def shutdown(): client.close()

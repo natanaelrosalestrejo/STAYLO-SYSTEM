@@ -53,10 +53,19 @@ class TestRoomsData:
 
     def test_total_40_rooms(self):
         token = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@hotel.com", "password": "admin123"}).json()["access_token"]
-        r = requests.get(f"{BASE_URL}/api/rooms", headers={"Authorization": f"Bearer {token}"})
+        headers = {"Authorization": f"Bearer {token}"}
+        r = requests.get(f"{BASE_URL}/api/rooms", headers=headers)
         assert r.status_code == 200
         rooms = r.json()
-        assert len(rooms) == 40, f"Expected 40 rooms, got {len(rooms)}"
+        # Remove TEST999 from a previous test run so we assert on seeded count only
+        for room in list(rooms):
+            if room.get("number") == "TEST999":
+                requests.delete(f"{BASE_URL}/api/rooms/{room['id']}", headers=headers)
+                break
+        r2 = requests.get(f"{BASE_URL}/api/rooms", headers=headers)
+        assert r2.status_code == 200
+        rooms = r2.json()
+        assert len(rooms) == 40, f"Expected 40 rooms, got {len(rooms)} (cleanup TEST999 if left by test_iteration8)"
 
     def test_junior_suites_at_rooms_5_15_25_35(self):
         token = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@hotel.com", "password": "admin123"}).json()["access_token"]
@@ -102,8 +111,9 @@ class TestPublicBookingCreate:
         assert data["nights"] == 2
 
     def test_create_booking_with_extras(self):
-        ci2 = (today + timedelta(days=60)).isoformat()
-        co2 = (today + timedelta(days=63)).isoformat()
+        # Use dates far ahead to avoid collision with other test runs or seeded data
+        ci2 = (today + timedelta(days=365)).isoformat()
+        co2 = (today + timedelta(days=368)).isoformat()
         payload = {
             "check_in_date": ci2,
             "check_out_date": co2,
