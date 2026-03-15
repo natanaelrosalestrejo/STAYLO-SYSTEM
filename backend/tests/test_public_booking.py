@@ -1,7 +1,7 @@
 """Tests for public booking endpoints and room data"""
-import pytest
-import requests
 import os
+import random
+import requests
 from datetime import date, timedelta
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL').rstrip('/')
@@ -111,9 +111,11 @@ class TestPublicBookingCreate:
         assert data["nights"] == 2
 
     def test_create_booking_with_extras(self):
-        # Use dates far ahead to avoid collision with other test runs or seeded data
-        ci2 = (today + timedelta(days=365)).isoformat()
-        co2 = (today + timedelta(days=368)).isoformat()
+        # Use a random window far ahead so repeated test runs don't all book the same dates (test isolation)
+        offset = random.randint(0, 200)
+        start = 365 + offset
+        ci2 = (today + timedelta(days=start)).isoformat()
+        co2 = (today + timedelta(days=start + 3)).isoformat()
         payload = {
             "check_in_date": ci2,
             "check_out_date": co2,

@@ -86,6 +86,7 @@ from models import (
     UserResponse,
     UserUpdate,
 )
+from routers import messages_router, tasks_router
 from seeds import COLORS, DEMO_PROPERTY_ID, run_all
 from services.scoring import calculate_garden_score, calculate_hotel_score
 
@@ -352,80 +353,6 @@ async def collect_payment(res_id: str, current_user: UserModel = Depends(require
     await _ensure_reservation_in_scope(res, current_user)
     await db.reservations.update_one({"id": res_id}, {"$set": {"payment_status": "paid"}})
     res["payment_status"] = "paid"; res.pop("_id", None); return res
-
-# --- MESSAGES ---
-@api_router.get("/messages/unread-count")
-async def unread_count(current_user: UserModel = Depends(get_current_user)):
-    count = await db.messages.count_documents({"receiver_id": current_user.id, "is_read": False})
-    return {"count": count}
-
-@api_router.get("/messages")
-async def get_messages(current_user: UserModel = Depends(get_current_user)):
-    msgs = await db.messages.find(
-        {"$or": [{"sender_id": current_user.id}, {"receiver_id": current_user.id}]},
-        {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return msgs
-
-@api_router.post("/messages")
-async def create_message(data: MessageCreate, current_user: UserModel = Depends(get_current_user)):
-    receiver_name = None
-    receiver = await db.users.find_one({"id": data.receiver_id})
-    if receiver:
-        receiver_name = receiver["name"]
-    else:
-        guest = await db.guests.find_one({"id": data.receiver_id})
-        if guest: receiver_name = f"{guest['first_name']} {guest['last_name']}"
-    if not receiver_name: raise HTTPException(status_code=404, detail="Destinatario no encontrado")
-    message = MessageModel(
-        thread_id=data.thread_id or str(uuid.uuid4()), sender_id=current_user.id,
-        sender_name=current_user.name, receiver_id=data.receiver_id, receiver_name=receiver_name,
-        subject=data.subject, content=data.content, message_type=data.message_type,
-        is_reply=data.parent_id is not None, parent_id=data.parent_id)
-    await db.messages.insert_one(message.model_dump())
-    return message.model_dump()
-
-@api_router.patch("/messages/{msg_id}/read")
-async def mark_read(msg_id: str, current_user: UserModel = Depends(get_current_user)):
-    await db.messages.update_one({"id": msg_id}, {"$set": {"is_read": True}})
-    return {"message": "Marcado como leído"}
-
-# --- TASKS ---
-@api_router.get("/tasks")
-async def get_tasks(current_user: UserModel = Depends(get_current_user)):
-    if current_user.role in ["admin", "receptionist", "manager"]:
-        return await db.tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return await db.tasks.find(
-        {"$or": [{"assigned_to": current_user.id}, {"assigned_by": current_user.id}]},
-        {"_id": 0}).sort("created_at", -1).to_list(1000)
-
-@api_router.post("/tasks")
-async def create_task(data: TaskCreate, current_user: UserModel = Depends(get_current_user)):
-    assigned_to_name = None
-    if data.assigned_to:
-        assignee = await db.users.find_one({"id": data.assigned_to})
-        if assignee: assigned_to_name = assignee["name"]
-    room_number = None
-    if data.room_id:
-        room = await db.rooms.find_one({"id": data.room_id})
-        if room: room_number = room["number"]
-    task = TaskModel(title=data.title, description=data.description, assigned_to=data.assigned_to,
-                     assigned_to_name=assigned_to_name, assigned_by=current_user.id,
-                     assigned_by_name=current_user.name, room_id=data.room_id, room_number=room_number,
-                     priority=data.priority, category=data.category, due_date=data.due_date)
-    await db.tasks.insert_one(task.model_dump()); return task.model_dump()
-
-@api_router.patch("/tasks/{task_id}/status")
-async def update_task_status(task_id: str, data: dict, current_user: UserModel = Depends(get_current_user)):
-    result = await db.tasks.find_one_and_update(
-        {"id": task_id},
-        {"$set": {"status": data.get("status"), "updated_at": datetime.now(timezone.utc).isoformat()}},
-        return_document=True)
-    if not result: raise HTTPException(status_code=404, detail="Tarea no encontrada")
-    result.pop("_id", None); return result
-
-@api_router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, current_user: UserModel = Depends(get_current_user)):
-    await db.tasks.delete_one({"id": task_id}); return {"message": "Tarea eliminada"}
 
 # --- REPORTS ---
 @api_router.get("/reports/dashboard")
@@ -1546,6 +1473,8 @@ async def startup():
 async def shutdown(): client.close()
 
 app.include_router(api_router)
+app.include_router(messages_router, prefix="/api")
+app.include_router(tasks_router, prefix="/api")
 app.add_middleware(CORSMiddleware, allow_credentials=True,
                    allow_origins=CORS_ORIGINS_LIST,
                    allow_methods=["*"], allow_headers=["*"])
