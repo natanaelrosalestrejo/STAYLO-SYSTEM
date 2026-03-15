@@ -1,0 +1,158 @@
+{
+  "identity": {
+    "persona": "E1: The Anti-AI Designer",
+    "philosophy": "Fusion over Imitation. Emotion First. Content is King.",
+    "anti_patterns": [
+      "No generic 'Bootstrap' layouts.",
+      "No 'Inter' for headings - use Manrope for character.",
+      "No center-aligned everything.",
+      "No excessive gradients - use them for focus only."
+    ]
+  },
+  "theme_strategy": {
+    "default_theme": "light",
+    "toggle_available": true,
+    "logic": "Light mode for day-shift clarity and hygiene perception. Dark mode for night-shift comfort."
+  },
+  "typography": {
+    "headings": {
+      "family": "Manrope, sans-serif",
+      "weights": ["600", "700", "800"],
+      "tracking": "-0.02em",
+      "usage": "All page titles, card headers, and modal titles. Use 'text-slate-900' in light mode."
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Data tables, descriptions, inputs. Optimized for density and legibility."
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Room numbers, reservation IDs, API keys."
+    }
+  },
+  "colors": {
+    "palette_name": "Modern Sanctuary",
+    "primary": {
+      "base": "#0F172A",
+      "description": "Deep Slate Navy. Used for Sidebars, Primary Headings, Strong Borders. Represents Authority and Luxury."
+    },
+    "brand_accent": {
+      "base": "#059669",
+      "hover": "#047857",
+      "light": "#D1FAE5",
+      "text_on_light": "#065F46",
+      "description": "Emerald Green. Used for Primary Actions (Check-in, Save), Success States, and Revenue metrics. Represents Freshness and Calm."
+    },
+    "secondary_accent": {
+      "base": "#D97706",
+      "light": "#FEF3C7",
+      "text_on_light": "#92400E",
+      "description": "Warm Amber. Used for 'Pending' states, Warnings, and Attention checks (e.g., 'Room Cleaning Required')."
+    },
+    "backgrounds": {
+      "app": "#F1F5F9",
+      "surface": "#FFFFFF",
+      "subtle": "#F8FAFC",
+      "sidebar": "#0F172A"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "tertiary": "#94A3B8"
+    },
+    "borders": {
+      "default": "#E2E8F0",
+      "active": "#CBD5E1"
+    }
+  },
+  "visual_enhancers": {
+    "radius": "0.5rem",
+    "shadows": {
+      "card": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "card_hover": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -2px rgb(0 0 0 / 0.05)",
+      "dropdown": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)"
+    },
+    "glassmorphism": {
+      "enabled": true,
+      "usage": "Sticky headers and modal overlays.",
+      "classes": "bg-white/80 backdrop-blur-md border-b border-white/20"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-brand-accent hover:bg-brand-accent-hover text-white rounded-md font-medium px-6 py-2 transition-all shadow-sm hover:shadow-md active:scale-95",
+      "secondary": "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-md font-medium px-6 py-2 transition-all",
+      "ghost": "hover:bg-slate-100 text-slate-600 hover:text-slate-900 rounded-md px-4 py-2"
+    },
+    "cards": {
+      "base": "bg-white border border-slate-200 rounded-lg shadow-sm p-6 transition-all hover:border-slate-300",
+      "interactive": "cursor-pointer hover:shadow-md hover:-translate-y-1"
+    },
+    "tables": {
+      "style": "clean",
+      "header_bg": "bg-slate-50",
+      "row_hover": "hover:bg-slate-50/50",
+      "cell_padding": "p-4"
+    },
+    "inputs": {
+      "style": "bg-white border-slate-200 focus:border-brand-accent focus:ring-brand-accent rounded-md h-10 px-3"
+    },
+    "status_badges": {
+      "success": "bg-emerald-100 text-emerald-700 border border-emerald-200",
+      "warning": "bg-amber-100 text-amber-700 border border-amber-200",
+      "error": "bg-red-100 text-red-700 border border-red-200",
+      "neutral": "bg-slate-100 text-slate-700 border border-slate-200"
+    }
+  },
+  "layout_strategies": {
+    "dashboard_grid": {
+      "type": "Bento Grid Mode B (Density)",
+      "classes": "grid grid-cols-1 md:grid-cols-4 gap-6"
+    },
+    "page_structure": {
+      "wrapper": "min-h-screen bg-slate-50/50",
+      "container": "max-w-7xl mx-auto p-8",
+      "header": "flex justify-between items-center mb-8"
+    }
+  },
+  "assets": {
+    "icons": {
+      "library": "lucide-react",
+      "style": "stroke-width={1.5} size={20}",
+      "usage": "Use consistent stroke width. Color matches text color usually."
+    },
+    "images": {
+      "rooms": [
+        "https://images.unsplash.com/photo-1759264244726-adde4e4318fc?q=85&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1759264244746-140bbbc54e1b?q=85&w=600&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1759264244764-2cb80f1a67bd?q=85&w=600&auto=format&fit=crop"
+      ],
+      "staff_avatars": [
+        "https://images.unsplash.com/photo-1740153204804-200310378f2f?q=85&w=150&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1678219414783-4a8574603999?q=85&w=150&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1549351778-5738a76408a3?q=85&w=150&auto=format&fit=crop"
+      ]
+    }
+  },
+  "ai_features": {
+    "visual_identity": "Use a subtle gradient border (purple-to-blue) for AI-generated content. Use a 'Sparkles' icon.",
+    "components": "MessageSuggestions, SmartSummaryCard",
+    "color": "text-violet-600 bg-violet-50 border-violet-200"
+  },
+  "accessibility": {
+    "rules": [
+      "Ensure 4.5:1 contrast ratio for all text.",
+      "Use focus-visible:ring-2 for keyboard navigation.",
+      "All interactive elements must have aria-labels if icon-only.",
+      "Respect prefers-reduced-motion."
+    ]
+  },
+  "universal_guidelines": [
+    "Do not use generic 'blue' (#3b82f6) for primary actions - use the Brand Emerald.",
+    "Use 'sonner' for all toast notifications.",
+    "Add 'data-testid' to all interactive elements.",
+    "Do not center-align dashboard widgets text - keep it left-aligned for scannability.",
+    "Use 'Manrope' font for all Headings (h1-h6). Import it from Google Fonts."
+  ]
+}

@@ -1,0 +1,101 @@
+* { box-sizing: border-box; }
+
+/* ============ ALMA BRAND TYPOGRAPHY ============ */
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Montserrat', sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.font-display {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+}
+
+body {
+  font-family: 'Montserrat', sans-serif;
+  background-color: #faf8f3;
+}
+
+/* ============ SIDEBAR NAV ============ */
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border-radius: 8px;
+  color: #c8b8a8;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.sidebar-nav-item:hover {
+  background-color: rgba(252, 245, 224, 0.1);
+  color: #fcf5e0;
+}
+
+.sidebar-nav-item.active {
+  background-color: rgba(252, 245, 224, 0.15);
+  color: #fcf5e0;
+  border-left: 2px solid #d2c7b6;
+  padding-left: 12px;
+}
+
+/* ============ CARD HOVER ============ */
+.card-hover {
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.card-hover:hover {
+  box-shadow: 0 8px 24px rgba(98, 87, 70, 0.12);
+  transform: translateY(-1px);
+}
+
+/* ============ FADE IN ANIMATION ============ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fadeIn 0.35s ease forwards;
+}
+
+/* ============ STATUS BADGES ============ */
+.status-available { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+.status-occupied { background: #e3eef9; color: #1565c0; border: 1px solid #90caf9; }
+.status-cleaning { background: #fef6e4; color: #8b5e0a; border: 1px solid #f9d976; }
+.status-maintenance { background: #fdecea; color: #b71c1c; border: 1px solid #ef9a9a; }
+.status-reserved { background: #f3edf7; color: #6a1b9a; border: 1px solid #ce93d8; }
+
+/* ============ PRIORITY BADGES ============ */
+.priority-low { background: #f5f0eb; color: #7a6a58; }
+.priority-medium { background: #fef6e4; color: #8b5e0a; }
+.priority-high { background: #fdecea; color: #b71c1c; }
+.priority-urgent { background: #b71c1c; color: #ffffff; }
+
+/* ============ AI CARD ============ */
+.ai-card {
+  background: linear-gradient(135deg, #faf3e8 0%, #f5ecd8 100%);
+  border: 1px solid #e0d0b8;
+}
+
+/* ============ CATALOG PAGE ============ */
+.catalog-hero {
+  background: linear-gradient(180deg, #625746 0%, #917a6a 100%);
+}
+
+.amenity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgba(98, 87, 70, 0.06);
+  border: 1px solid #d2c7b6;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #625746;
+  font-family: 'Montserrat', sans-serif;
+}
