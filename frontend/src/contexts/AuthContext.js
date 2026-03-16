@@ -15,6 +15,12 @@ export const AuthProvider = ({ children }) => {
         const parsedUser = JSON.parse(savedUser);
         setUser(parsedUser);
         api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        // Refresh user from backend so effective modules (role permissions) are up to date
+        api.get('/auth/me').then((r) => {
+          const fresh = r.data;
+          setUser(fresh);
+          localStorage.setItem('hotel_user', JSON.stringify(fresh));
+        }).catch(() => {});
       } catch (e) {
         localStorage.removeItem('hotel_token');
         localStorage.removeItem('hotel_user');

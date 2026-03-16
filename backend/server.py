@@ -102,6 +102,17 @@ api_router = APIRouter(prefix="/api")
 
 # ====================== ROUTES ======================
 
+async def _effective_modules_for_user(user_obj: UserModel) -> list:
+    """Return effective module list for UI: custom_permissions if set, else merged role_permissions for user's role."""
+    perms = await db.role_permissions.find({}, {"_id": 0}).to_list(20)
+    merged = dict(DEFAULT_ROLE_PERMISSIONS)
+    for p in perms:
+        merged[p["role"]] = p["modules"]
+    if user_obj.custom_permissions is not None and len(user_obj.custom_permissions) > 0:
+        return user_obj.custom_permissions
+    return merged.get(user_obj.role, [])
+
+
 @api_router.post("/auth/login")
 async def login(data: LoginRequest):
     user = await db.users.find_one({"email": data.email}, {"_id": 0})
@@ -111,11 +122,43 @@ async def login(data: LoginRequest):
         raise HTTPException(status_code=403, detail="Cuenta desactivada")
     user_obj = UserModel(**user)
     token = create_token({"sub": user_obj.id, "role": user_obj.role})
-    return {"access_token": token, "token_type": "bearer", "user": UserResponse(**user_obj.model_dump())}
+    user_payload = UserResponse(**user_obj.model_dump()).model_dump()
+    user_payload["modules"] = await _effective_modules_for_user(user_obj)
+    return {"access_token": token, "token_type": "bearer", "user": user_payload}
+
 
 @api_router.get("/auth/me")
 async def get_me(current_user: UserModel = Depends(get_current_user)):
-    return UserResponse(**current_user.model_dump())
+    payload = UserResponse(**current_user.model_dump()).model_dump()
+    payload["modules"] = await _effective_modules_for_user(current_user)
+    return payload
+
+def _sanitize_custom_permissions_for_role(role: str, custom_permissions: Optional[list]) -> Optional[list]:
+    """Coerce/limit custom_permissions to keep role semantics coherent and avoid self-locking.
+
+    - platform_admin: ignore custom_permissions so they always use role defaults (platform access cannot be lost).
+    - staff roles: ignore custom_permissions (they use role defaults and Permisos).
+    - owner: keep only strategic/corporate modules.
+    - manager: keep only modules defined in DEFAULT_ROLE_PERMISSIONS for manager.
+    - other roles: leave as-is.
+    """
+    if not custom_permissions:
+        return None
+    if role == "platform_admin":
+        return None
+    staff_roles = {"receptionist", "housekeeping", "maintenance", "security", "restaurant"}
+    if role in staff_roles:
+        return None
+    if role == "owner":
+        allowed = {"corporate", "hotels", "event-gardens", "reports"}
+        filtered = [m for m in custom_permissions if m in allowed]
+        return filtered or None
+    if role == "manager":
+        allowed = set(DEFAULT_ROLE_PERMISSIONS.get("manager", []))
+        filtered = [m for m in custom_permissions if m in allowed]
+        return filtered or None
+    return custom_permissions
+
 
 # --- USERS ---
 @api_router.get("/users")
@@ -134,10 +177,11 @@ async def create_user(data: UserCreate, current_user: UserModel = Depends(requir
         raise HTTPException(status_code=403, detail="Gerentes solo pueden crear gerentes y personal")
     if await db.users.find_one({"email": data.email}):
         raise HTTPException(status_code=400, detail="Email ya registrado")
+    sanitized_custom = _sanitize_custom_permissions_for_role(data.role, data.custom_permissions)
     user = UserModel(name=data.name, email=data.email, password_hash=hash_password(data.password),
                      role=data.role, admin_type=data.admin_type, staff_subtype=data.staff_subtype,
                      department=data.department, phone=data.phone,
-                     custom_permissions=data.custom_permissions,
+                     custom_permissions=sanitized_custom,
                      property_id=data.property_id, tenant_id=data.tenant_id,
                      avatar_color=random.choice(COLORS))
     await db.users.insert_one(user.model_dump())
@@ -145,16 +189,26 @@ async def create_user(data: UserCreate, current_user: UserModel = Depends(requir
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, data: UserUpdate, current_user: UserModel = Depends(require_role("admin", "platform_admin", "manager"))):
+    existing = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
     dump = data.model_dump()
+    # Decide final role after update (defaults to existing role)
+    new_role = dump.get("role") or existing.get("role")
     NULLABLE_FIELDS = {'custom_permissions', 'admin_type', 'staff_subtype', 'property_id', 'tenant_id'}
     update_dict = {k: v for k, v in dump.items() if k not in NULLABLE_FIELDS and k != 'password' and v is not None}
     for field in NULLABLE_FIELDS:
         if field in dump:
-            update_dict[field] = dump[field]
+            # special handling for custom_permissions to keep role semantics coherent
+            if field == "custom_permissions":
+                update_dict[field] = _sanitize_custom_permissions_for_role(new_role, dump[field])
+            else:
+                update_dict[field] = dump[field]
     if dump.get('password'):
         update_dict['password_hash'] = hash_password(dump['password'])
     result = await db.users.find_one_and_update({"id": user_id}, {"$set": update_dict}, return_document=True)
-    if not result: raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if not result:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return UserResponse(**result)
 
 @api_router.delete("/users/{user_id}")

@@ -414,8 +414,10 @@ class AmenityCreate(BaseModel):
 
 
 DEFAULT_ROLE_PERMISSIONS = {
+    "platform_admin": ["platform_admin"],
     "admin": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog", "reports", "staff", "properties"],
     "owner": ["corporate", "hotels", "event-gardens", "reports"],
+    "manager": ["dashboard", "reservations", "rooms", "guests", "jardines", "hotel-events", "inbox", "tasks", "catalog", "reports", "staff", "room-types"],
     "receptionist": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog"],
     "housekeeping": ["inbox", "tasks"],
     "maintenance": ["inbox", "tasks"],

@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useProperty } from '../contexts/PropertyContext';
 import api from '../utils/api';
+import { getModuleForPath } from '../utils/permissions';
 import {
   LayoutDashboard, CalendarCheck, BedDouble, Users, Inbox,
   CheckSquare, BarChart3, UserCog, LogOut, Bell, Menu, BookOpen,
@@ -40,33 +41,6 @@ const navItems = [
   { to: '/room-types', icon: Cpu, label: 'Tipos de Hab.', roles: ['admin', 'manager'] },
   { to: '/properties', icon: Settings, label: 'Propiedades', roles: ['admin'] },
 ];
-
-// Module key → nav path mapping (for custom_permissions filtering)
-const PATH_TO_MODULE = {
-  '/platform-admin':              'platform_admin',
-  '/platform-admin/tenants':      'platform_admin',
-  '/platform-admin/propiedades':  'platform_admin',
-  '/platform-admin/permisos':     'platform_admin',
-  '/platform-admin/onboarding':   'platform_admin',
-  '/platform-admin/usuarios':     'platform_admin',
-  '/platform-admin/facturacion':  'platform_admin',
-  '/staff':          'staff',
-  '/corporate':      'corporate',
-  '/hotels':         'hotels',
-  '/event-gardens':  'event-gardens',
-  '/':               'dashboard',
-  '/reservations':   'reservations',
-  '/rooms':          'rooms',
-  '/guests':         'guests',
-  '/jardines':       'jardines',
-  '/hotel-events':   'hotel-events',
-  '/room-types':     'room-types',
-  '/inbox':          'inbox',
-  '/tasks':          'tasks',
-  '/catalogo':       'catalog',
-  '/reports':        'reports',
-  '/properties':     'properties',
-};
 
 const ADMIN_TYPE_LABELS = {
   platform_support: 'Platform Support',
@@ -122,10 +96,12 @@ export default function Layout({ children }) {
   const isPlatformAdmin = user?.role === 'platform_admin';
 
   const roleFiltered = navItems.filter(n => n.roles.includes(user?.role));
-  const filtered = user?.custom_permissions
+  // Backend sends effective modules (role_permissions merged with DB overrides, or custom_permissions if set)
+  const modules = user?.modules;
+  const filtered = modules && modules.length > 0
     ? roleFiltered.filter(n => {
-        const mod = PATH_TO_MODULE[n.to];
-        return mod ? user.custom_permissions.includes(mod) : true;
+        const mod = getModuleForPath(n.to);
+        return mod ? modules.includes(mod) : true;
       })
     : roleFiltered;
 

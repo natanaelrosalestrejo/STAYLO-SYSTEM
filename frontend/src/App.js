@@ -1,5 +1,5 @@
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { PropertyProvider } from "./contexts/PropertyContext";
@@ -24,9 +24,11 @@ import PropertyManagement from "./pages/PropertyManagement";
 import PlatformAdmin from "./pages/PlatformAdmin";
 import HotelEvents from "./pages/HotelEvents";
 import RoomTypes from "./pages/RoomTypes";
+import { canAccessRoute, getDefaultPathForRole } from "./utils/permissions";
 
 const ProtectedRoute = ({ children, allowedRoles = null }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="flex flex-col items-center gap-3">
@@ -36,9 +38,8 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    const fallback = user.role === 'platform_admin' ? '/platform-admin'
-      : user.role === 'owner' ? '/corporate' : '/tasks';
+  if (!canAccessRoute(user, location.pathname, allowedRoles)) {
+    const fallback = getDefaultPathForRole(user.role);
     return <Navigate to={fallback} replace />;
   }
   return <Layout>{children}</Layout>;
@@ -46,10 +47,7 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
 
 function AppRoutes() {
   const { user } = useAuth();
-  const defaultPath = user?.role === 'platform_admin' ? '/platform-admin'
-    : user?.role === 'owner' ? '/corporate'
-    : ['admin','receptionist'].includes(user?.role) ? '/'
-    : '/tasks';
+  const defaultPath = user ? getDefaultPathForRole(user.role) : '/login';
   return (
     <Routes>
       <Route path="/login" element={user ? <Navigate to={defaultPath} replace /> : <Login />} />
@@ -58,22 +56,22 @@ function AppRoutes() {
       <Route path="/corporate" element={<ProtectedRoute allowedRoles={['admin','owner']}><CorporateDashboard /></ProtectedRoute>} />
       <Route path="/hotels" element={<ProtectedRoute allowedRoles={['admin','owner']}><HotelsOverview /></ProtectedRoute>} />
       <Route path="/event-gardens" element={<ProtectedRoute allowedRoles={['admin','owner']}><EventGardensOverview /></ProtectedRoute>} />
-      <Route path="/" element={<ProtectedRoute allowedRoles={['admin','receptionist']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['admin','receptionist']}><Reservations /></ProtectedRoute>} />
-      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['admin','receptionist']}><Rooms /></ProtectedRoute>} />
-      <Route path="/guests" element={<ProtectedRoute allowedRoles={['admin','receptionist']}><Guests /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Dashboard /></ProtectedRoute>} />
+      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Reservations /></ProtectedRoute>} />
+      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Rooms /></ProtectedRoute>} />
+      <Route path="/guests" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Guests /></ProtectedRoute>} />
       <Route path="/jardines" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><EventGarden /></ProtectedRoute>} />
       <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><HotelEvents /></ProtectedRoute>} />
       <Route path="/room-types" element={<ProtectedRoute allowedRoles={['admin','manager']}><RoomTypes /></ProtectedRoute>} />
       <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','owner']}><Reports /></ProtectedRoute>} />
-      <Route path="/staff" element={<ProtectedRoute allowedRoles={['admin', 'platform_admin']}><Staff /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','owner','manager']}><Reports /></ProtectedRoute>} />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['admin','platform_admin','manager']}><Staff /></ProtectedRoute>} />
       <Route path="/properties" element={<ProtectedRoute allowedRoles={['admin']}><PropertyManagement /></ProtectedRoute>} />
       <Route path="/catalogo" element={<RoomsCatalog />} />
       <Route path="/reservar" element={<BookingWizard />} />
       <Route path="/mi-reserva" element={<BookingLookup />} />
-      <Route path="*" element={<Navigate to={user ? defaultPath : '/login'} replace />} />
+      <Route path="*" element={<Navigate to={defaultPath} replace />} />
     </Routes>
   );
 }

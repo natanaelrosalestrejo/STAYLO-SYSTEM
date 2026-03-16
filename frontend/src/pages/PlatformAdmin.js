@@ -735,7 +735,7 @@ function RolePermissionsTab() {
     <div className="space-y-5">
       <div className="flex items-center gap-2 mb-1">
         <Shield size={16} className="text-slate-500" />
-        <p className="text-sm text-slate-500">Controla qué módulos puede acceder cada rol. Los cambios se aplican en el próximo inicio de sesión.</p>
+        <p className="text-sm text-slate-500">Módulos por defecto de cada rol. Los usuarios con este rol verán estos módulos a menos que tengan permisos personalizados en Usuarios. Los cambios se aplican en el próximo inicio de sesión.</p>
       </div>
       <div className="flex gap-2 flex-wrap">
         {ROLES_EDITABLE.map(r => (
@@ -1589,39 +1589,78 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
                 </div>
               </div>
 
-              {/* Custom permissions — available for Admin, Propietario, Gerente */}
+              {/* Custom permissions — available for Admin, Propietario, Gerente (no overrides for Platform Admin) */}
               <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <button type="button"
+                <button
+                  type="button"
                   onClick={() => set('showCustom', !form.showCustom)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm font-semibold text-slate-700">
+                  className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-sm font-semibold text-slate-700"
+                  disabled={resolveRolePayload().role === 'platform_admin'}
+                >
                   <div className="flex items-center gap-2">
                     <Lock size={14} className="text-violet-600" />
                     Permisos personalizados
-                    {form.showCustom && (
+                    {resolveRolePayload().role === 'platform_admin' && (
+                      <span className="text-xs text-slate-400">(no disponible para Platform Admin)</span>
+                    )}
+                    {form.showCustom && resolveRolePayload().role !== 'platform_admin' && (
                       <span className="px-1.5 py-0.5 bg-violet-100 text-violet-700 text-xs rounded-full">Activo</span>
                     )}
                   </div>
-                  {form.showCustom ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />}
+                  {resolveRolePayload().role !== 'platform_admin' && (
+                    form.showCustom ? <ChevronUp size={16} className="text-slate-400" /> : <ChevronDown size={16} className="text-slate-400" />
+                  )}
                 </button>
-                {form.showCustom && (
+                {form.showCustom && resolveRolePayload().role !== 'platform_admin' && (
                   <div className="px-4 py-4 space-y-3">
-                    <p className="text-xs text-slate-500">Sobreescribe los módulos accesibles para este usuario.</p>
+                    <p className="text-xs text-slate-500">
+                      Sobreescribe los módulos del rol. Si no activas permisos personalizados, el usuario usará los módulos por defecto de su rol (definidos en Permisos).
+                    </p>
                     <div className="grid grid-cols-2 gap-1.5">
-                      {PLATFORM_MODULES.map(({ key, label }) => {
-                        const checked = form.customPerms.includes(key);
-                        return (
-                          <label key={key}
-                            className={`flex items-center gap-2 cursor-pointer p-2 rounded-lg border text-xs transition-all select-none ${checked ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
-                            <input type="checkbox" checked={checked}
-                              onChange={() => set('customPerms', checked
-                                ? form.customPerms.filter(m => m !== key)
-                                : [...form.customPerms, key]
-                              )}
-                              className="w-3.5 h-3.5 accent-violet-600" />
-                            <span className="text-slate-700">{label}</span>
-                          </label>
-                        );
-                      })}
+                      {PLATFORM_MODULES
+                        .filter(({ key }) => {
+                          const { role } = resolveRolePayload();
+                          if (role === 'owner') {
+                            // Owner: solo módulos estratégicos
+                            return ['corporate', 'hotels', 'event-gardens', 'reports'].includes(key);
+                          }
+                          if (role === 'manager') {
+                            // Manager: solo módulos coherentes con su rol
+                            return [
+                              'dashboard', 'reservations', 'rooms', 'guests',
+                              'jardines', 'inbox', 'tasks', 'catalog',
+                              'reports', 'staff', 'room-types',
+                            ].includes(key);
+                          }
+                          if (role === 'admin') {
+                            // Admin: puede ajustar todos los módulos aplicables excepto el módulo de plataforma
+                            return key !== 'platform_admin';
+                          }
+                          return false;
+                        })
+                        .map(({ key, label }) => {
+                          const checked = form.customPerms.includes(key);
+                          return (
+                            <label
+                              key={key}
+                              className={`flex items-center gap-2 cursor-pointer p-2 rounded-lg border text-xs transition-all select-none ${checked ? 'border-violet-300 bg-violet-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() =>
+                                  set('customPerms',
+                                    checked
+                                      ? form.customPerms.filter(m => m !== key)
+                                      : [...form.customPerms, key],
+                                  )
+                                }
+                                className="w-3.5 h-3.5 accent-violet-600"
+                              />
+                              <span className="text-slate-700">{label}</span>
+                            </label>
+                          );
+                        })}
                     </div>
                     <p className="text-xs text-slate-400">{form.customPerms.length} módulos seleccionados</p>
                   </div>
