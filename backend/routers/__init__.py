@@ -6,5 +6,6 @@ from .tasks import router as tasks_router
 from .users import router as users_router
 from .auth import router as auth_router
 from .rooms import router as rooms_router
+from .guests import router as guests_router
 
-__all__ = ["messages_router", "tasks_router", "users_router", "auth_router", "rooms_router"]
+__all__ = ["messages_router", "tasks_router", "users_router", "auth_router", "rooms_router", "guests_router"]
