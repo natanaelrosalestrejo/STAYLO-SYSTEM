@@ -46,7 +46,7 @@ body {
   body { @apply bg-background text-foreground; }
 }
 
-/* ============ ALMA BRAND COLOR OVERRIDES ============ */
+/* ============ STAYLO brand color overrides ============ */
 .bg-emerald-600 { background-color: #625746 !important; }
 .bg-emerald-700 { background-color: #4d4238 !important; }
 .bg-emerald-500 { background-color: #917a6a !important; }

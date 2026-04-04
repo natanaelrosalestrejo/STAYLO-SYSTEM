@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useProperty } from '../contexts/PropertyContext';
@@ -42,7 +42,7 @@ const EVENT_TYPES = {
 
 export default function HotelEvents() {
   const { user } = useAuth();
-  const { properties } = useProperty();
+  const { properties, selectedPropertyId } = useProperty();
   const [spaces, setSpaces] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [tab, setTab] = useState('spaces');
@@ -53,7 +53,17 @@ export default function HotelEvents() {
   const [bookingForm, setBookingForm] = useState(EMPTY_BOOKING);
   const [loading, setLoading] = useState(false);
 
-  const hotelProp = properties.find(p => p.type === 'hotel');
+  /** Hotel en contexto: propiedad seleccionada si es hotel; si no, primer hotel del tenant. */
+  const hotelProp = useMemo(() => {
+    const hotels = properties.filter((p) => p.type === 'hotel');
+    if (!hotels.length) return null;
+    if (selectedPropertyId && selectedPropertyId !== 'all') {
+      const sel = hotels.find((p) => p.id === selectedPropertyId);
+      if (sel) return sel;
+    }
+    return hotels[0];
+  }, [properties, selectedPropertyId]);
+
   const isAdmin = ['admin', 'manager'].includes(user?.role);
 
   const fetchData = async () => {

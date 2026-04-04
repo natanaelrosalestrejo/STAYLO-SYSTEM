@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 
-from auth import get_current_user, require_role, _allowed_property_ids, _ensure_guest_in_scope
+from auth import require_module, require_role, _allowed_property_ids, _ensure_guest_in_scope
 from db import db
 from models import GuestCreate, GuestModel, UserModel
 
@@ -8,7 +8,7 @@ router = APIRouter()
 
 
 @router.get("/guests")
-async def get_guests(current_user: UserModel = Depends(get_current_user)):
+async def get_guests(current_user: UserModel = Depends(require_module("guests"))):
     allowed = await _allowed_property_ids(current_user)
     if allowed is None:
         return await db.guests.find({}, {"_id": 0}).to_list(1000)
@@ -23,13 +23,13 @@ async def get_guests(current_user: UserModel = Depends(get_current_user)):
 
 
 @router.post("/guests")
-async def create_guest(data: GuestCreate, current_user: UserModel = Depends(get_current_user)):
+async def create_guest(data: GuestCreate, current_user: UserModel = Depends(require_module("guests"))):
     guest = GuestModel(**data.model_dump())
     await db.guests.insert_one(guest.model_dump()); return guest.model_dump()
 
 
 @router.get("/guests/{guest_id}")
-async def get_guest(guest_id: str, current_user: UserModel = Depends(get_current_user)):
+async def get_guest(guest_id: str, current_user: UserModel = Depends(require_module("guests"))):
     guest = await db.guests.find_one({"id": guest_id}, {"_id": 0})
     if not guest: raise HTTPException(status_code=404, detail="Huésped no encontrado")
     await _ensure_guest_in_scope(guest_id, current_user)
@@ -37,7 +37,9 @@ async def get_guest(guest_id: str, current_user: UserModel = Depends(get_current
 
 
 @router.put("/guests/{guest_id}")
-async def update_guest(guest_id: str, data: GuestCreate, current_user: UserModel = Depends(get_current_user)):
+async def update_guest(
+    guest_id: str, data: GuestCreate, current_user: UserModel = Depends(require_module("guests"))
+):
     await _ensure_guest_in_scope(guest_id, current_user)
     update_dict = {k: v for k, v in data.model_dump().items() if v is not None}
     result = await db.guests.find_one_and_update({"id": guest_id}, {"$set": update_dict}, return_document=True)
@@ -46,13 +48,17 @@ async def update_guest(guest_id: str, data: GuestCreate, current_user: UserModel
 
 
 @router.delete("/guests/{guest_id}")
-async def delete_guest(guest_id: str, current_user: UserModel = Depends(get_current_user)):
+async def delete_guest(guest_id: str, current_user: UserModel = Depends(require_module("guests"))):
     await _ensure_guest_in_scope(guest_id, current_user)
     await db.guests.delete_one({"id": guest_id}); return {"message": "Huésped eliminado"}
 
 
 @router.patch("/guests/{guest_id}/vip")
-async def toggle_vip(guest_id: str, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def toggle_vip(
+    guest_id: str,
+    _: UserModel = Depends(require_module("guests")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     guest = await db.guests.find_one({"id": guest_id})
     if not guest: raise HTTPException(status_code=404, detail="Huésped no encontrado")
     await _ensure_guest_in_scope(guest_id, current_user)
@@ -62,7 +68,11 @@ async def toggle_vip(guest_id: str, current_user: UserModel = Depends(require_ro
 
 
 @router.get("/guests/{guest_id}/reservations")
-async def guest_reservations(guest_id: str, current_user: UserModel = Depends(get_current_user)):
+async def guest_reservations(
+    guest_id: str,
+    _: UserModel = Depends(require_module("guests")),
+    current_user: UserModel = Depends(require_module("reservations")),
+):
     await _ensure_guest_in_scope(guest_id, current_user)
     allowed = await _allowed_property_ids(current_user)
     if allowed is None:

@@ -1,3 +1,7 @@
+> **Nota:** Este documento vive en `docs/operations/seeds.md` (antes `backend/SEED_ANALYSIS.md`). La lógica de seed en código puede estar en `backend/seeds/run.py` y arranque en `server.py`.
+
+---
+
 # Backend seed logic — analysis
 
 This document explains exactly how the local database gets its baseline data (Alma Hospitality Group, Alma Hotel Boutique, Jardín de Amargati, demo users, tasks, room types, amenities, permissions) and what is **not** seeded.

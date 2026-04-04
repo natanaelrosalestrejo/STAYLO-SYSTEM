@@ -4,7 +4,7 @@ import random
 import requests
 from datetime import date, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL').rstrip('/')
+BASE_URL = (os.environ.get('REACT_APP_BACKEND_URL') or "http://localhost:8000").rstrip('/')
 
 today = date.today()
 check_in = (today + timedelta(days=30)).isoformat()

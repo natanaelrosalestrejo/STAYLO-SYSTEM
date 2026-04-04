@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../contexts/AuthContext';
 import { useProperty } from '../contexts/PropertyContext';
@@ -52,13 +53,26 @@ const EMPTY_FORM = {
 
 export default function EventGarden() {
   const { user } = useAuth();
-  const { properties } = useProperty();
+  const { properties, selectedPropertyId } = useProperty();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const eventDeepLinkHandled = useRef(null);
   const [spaces, setSpaces] = useState([]);
+  const [rooms, setRooms] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState('bookings'); // bookings | spaces | calendar
   const [showModal, setShowModal] = useState(false);
   const [detailBooking, setDetailBooking] = useState(null);
+  const [lodgingData, setLodgingData] = useState(null);
+  const [lodgingForm, setLodgingForm] = useState({
+    lodging_integration_enabled: false,
+    bride_room_id: '',
+    groom_room_id: '',
+    parents_room_id: '',
+    close_family_room_id: '',
+    guest_block_count: 0,
+  });
+  const [lodgingSaving, setLodgingSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   // Calendar state
@@ -66,25 +80,46 @@ export default function EventGarden() {
     const d = new Date(); return { year: d.getFullYear(), month: d.getMonth() };
   });
 
-  const gardenProp = properties.find(p => p.type === 'event_garden');
+  const propIdFromUrl = searchParams.get('propertyId');
+  /** Jardín en contexto: ?propertyId= si es válido; si no, propiedad seleccionada si es jardín; si no, primer jardín. */
+  const gardenProp = useMemo(() => {
+    const gardens = properties.filter((p) => p.type === 'event_garden');
+    if (!gardens.length) return null;
+    if (propIdFromUrl) {
+      const hit = gardens.find((p) => p.id === propIdFromUrl);
+      if (hit) return hit;
+    }
+    if (selectedPropertyId && selectedPropertyId !== 'all') {
+      const sel = gardens.find((p) => p.id === selectedPropertyId);
+      if (sel) return sel;
+    }
+    return gardens[0];
+  }, [properties, propIdFromUrl, selectedPropertyId]);
   const isAdmin = user?.role === 'admin';
   const isReceptionist = ['admin', 'receptionist'].includes(user?.role);
 
   const fetchData = async () => {
     try {
       const propId = gardenProp?.id;
-      const [s, b] = await Promise.all([
+      const [s, b, r] = await Promise.all([
         api.get('/event-spaces' + (propId ? `?property_id=${propId}` : '')),
         api.get('/event-bookings' + (propId ? `?property_id=${propId}` : '')),
+        api.get('/rooms'),
       ]);
       setSpaces(s.data);
       setBookings(b.data);
+      setRooms((r.data || []).filter(room => room.property_id === propId));
     } catch (e) {}
   };
 
   useEffect(() => {
     fetchData();
   }, [gardenProp?.id]);
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'calendar' || t === 'bookings' || t === 'spaces') setTab(t);
+  }, [searchParams]);
 
   const filtered = bookings.filter(b => {
     const q = search.toLowerCase();
@@ -131,6 +166,82 @@ export default function EventGarden() {
       toast.success('Reserva eliminada');
       fetchData();
     } catch { toast.error('Error al eliminar'); }
+  };
+
+  const loadLodging = async (booking) => {
+    try {
+      const res = await api.get(`/event-bookings/${booking.id}/lodging`);
+      const data = res.data;
+      setLodgingData(data);
+      const assignments = data.assignments || [];
+      const findSpecial = (role) => assignments.find(a => a.assignment_type === 'special_role' && a.special_role === role && ['held', 'reserved'].includes(a.assignment_status));
+      setLodgingForm({
+        lodging_integration_enabled: !!data.lodging_integration_enabled,
+        bride_room_id: findSpecial('bride')?.room_id || '',
+        groom_room_id: findSpecial('groom')?.room_id || '',
+        parents_room_id: findSpecial('parents')?.room_id || '',
+        close_family_room_id: findSpecial('close_family')?.room_id || '',
+        guest_block_count: data.room_block?.target_room_count || 0,
+      });
+    } catch {
+      setLodgingData(null);
+      setLodgingForm({
+        lodging_integration_enabled: false,
+        bride_room_id: '',
+        groom_room_id: '',
+        parents_room_id: '',
+        close_family_room_id: '',
+        guest_block_count: 0,
+      });
+    }
+  };
+
+  const openDetail = (booking) => {
+    setDetailBooking(booking);
+    loadLodging(booking);
+  };
+
+  useEffect(() => {
+    const eid = searchParams.get('eventId');
+    if (!eid || !bookings.length) return;
+    if (eventDeepLinkHandled.current === eid) return;
+    const b = bookings.find(x => x.id === eid);
+    if (b) {
+      eventDeepLinkHandled.current = eid;
+      setDetailBooking(b);
+      loadLodging(b);
+      setTab('bookings');
+      const next = new URLSearchParams(searchParams);
+      next.delete('eventId');
+      setSearchParams(next, { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadLodging estable para el efecto de deep link
+  }, [bookings, searchParams, setSearchParams]);
+
+  const saveLodgingSetup = async () => {
+    if (!detailBooking) return;
+    setLodgingSaving(true);
+    try {
+      const special_rooms = [
+        { special_role: 'bride', room_id: lodgingForm.bride_room_id || null },
+        { special_role: 'groom', room_id: lodgingForm.groom_room_id || null },
+        { special_role: 'parents', room_id: lodgingForm.parents_room_id || null },
+        { special_role: 'close_family', room_id: lodgingForm.close_family_room_id || null },
+      ];
+      await api.post(`/event-bookings/${detailBooking.id}/lodging/setup`, {
+        lodging_integration_enabled: !!lodgingForm.lodging_integration_enabled,
+        check_in_date: detailBooking.event_date,
+        check_out_date: detailBooking.event_date,
+        special_rooms,
+        guest_block_count: parseInt(lodgingForm.guest_block_count) || 0,
+      });
+      toast.success('Hospedaje del evento actualizado');
+      await loadLodging(detailBooking);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al guardar hospedaje');
+    } finally {
+      setLodgingSaving(false);
+    }
   };
 
   // Metrics
@@ -270,7 +381,7 @@ export default function EventGarden() {
                       <div className="flex items-center gap-1">
                         <button
                           data-testid={`view-event-${b.id}`}
-                          onClick={() => setDetailBooking(b)}
+                          onClick={() => openDetail(b)}
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
                           <Eye size={14} />
                         </button>
@@ -438,7 +549,7 @@ export default function EventGarden() {
       {detailBooking && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setDetailBooking(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
                 Detalle del Evento
@@ -448,7 +559,7 @@ export default function EventGarden() {
                 <XCircle size={18} />
               </button>
             </div>
-            <div className="px-6 py-5 space-y-3">
+            <div className="px-6 py-5 space-y-5">
               {[
                 { label: 'Cliente', value: detailBooking.client_name },
                 { label: 'Espacio', value: detailBooking.event_space_name },
@@ -467,6 +578,77 @@ export default function EventGarden() {
                   <span className="text-sm text-slate-800 text-right">{value}</span>
                 </div>
               ))}
+
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-800">Integración de hospedaje (Fase 1)</h3>
+                  <label className="flex items-center gap-2 text-xs text-slate-600">
+                    <input
+                      type="checkbox"
+                      checked={!!lodgingForm.lodging_integration_enabled}
+                      onChange={e => setLodgingForm(f => ({ ...f, lodging_integration_enabled: e.target.checked }))}
+                    />
+                    Activar
+                  </label>
+                </div>
+
+                {lodgingForm.lodging_integration_enabled && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { key: 'bride_room_id', label: 'Habitación Novia' },
+                        { key: 'groom_room_id', label: 'Habitación Novio' },
+                        { key: 'parents_room_id', label: 'Habitación Padres' },
+                        { key: 'close_family_room_id', label: 'Habitación Familia Cercana' },
+                      ].map(({ key, label }) => (
+                        <div key={key}>
+                          <label className="block text-xs font-semibold text-slate-600 mb-1">{label}</label>
+                          <select
+                            value={lodgingForm[key]}
+                            onChange={e => setLodgingForm(f => ({ ...f, [key]: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white"
+                          >
+                            <option value="">Sin asignar</option>
+                            {rooms.map(r => (
+                              <option key={r.id} value={r.id}>#{r.number} · {r.type}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1">Bloque simple de huéspedes (habitaciones)</label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={lodgingForm.guest_block_count}
+                        onChange={e => setLodgingForm(f => ({ ...f, guest_block_count: e.target.value }))}
+                        className="w-full max-w-[220px] border border-slate-200 rounded-lg px-2 py-1.5 text-xs"
+                      />
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg p-3">
+                  <div className="text-xs text-slate-600">
+                    <p>Resumen habitaciones</p>
+                    <p className="mt-1">
+                      Held: <strong>{lodgingData?.summary?.held || 0}</strong> · Reserved: <strong>{lodgingData?.summary?.reserved || 0}</strong> · Released: <strong>{lodgingData?.summary?.released || 0}</strong> · Cancelled: <strong>{lodgingData?.summary?.cancelled || 0}</strong>
+                    </p>
+                  </div>
+                  {isReceptionist && (
+                    <button
+                      onClick={saveLodgingSetup}
+                      disabled={lodgingSaving}
+                      className="px-3 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50"
+                      style={{ background: '#625746' }}
+                    >
+                      {lodgingSaving ? 'Guardando...' : 'Guardar hospedaje'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -533,7 +715,7 @@ export default function EventGarden() {
                         {dayEvents.slice(0, 2).map(b => {
                           const et = EVENT_TYPES[b.event_type] || EVENT_TYPES.other;
                           return (
-                            <button key={b.id} onClick={() => setDetailBooking(b)}
+                            <button key={b.id} onClick={() => openDetail(b)}
                               className={`w-full text-left px-1.5 py-0.5 rounded text-xs font-medium truncate ${et.color} transition-opacity hover:opacity-80`}>
                               {b.client_name}
                             </button>
@@ -557,7 +739,7 @@ export default function EventGarden() {
                     const et = EVENT_TYPES[b.event_type] || EVENT_TYPES.other;
                     return (
                       <div key={b.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50 cursor-pointer transition-colors"
-                        onClick={() => setDetailBooking(b)}>
+                        onClick={() => openDetail(b)}>
                         <div className="text-xs font-bold text-slate-400 w-10 text-center flex-shrink-0">
                           {b.event_date?.split('-')[2]}
                         </div>

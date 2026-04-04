@@ -1,3 +1,7 @@
+> **Ubicación:** `docs/architecture-backend-status.md` (movido desde `backend/BACKEND_STABILIZATION_STATUS.md`). Estado vivo del refactor backend.
+
+---
+
 # Backend stabilization — current status and next steps
 
 **Last updated:** After Phase 2 (models extraction).  

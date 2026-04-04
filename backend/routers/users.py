@@ -3,7 +3,7 @@ import random
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from auth import require_role, get_current_user, hash_password
+from auth import hash_password, require_module, require_role
 from db import db
 from models import UserModel, UserCreate, UserUpdate, UserResponse, DEFAULT_ROLE_PERMISSIONS
 from seeds import COLORS
@@ -24,7 +24,7 @@ def _sanitize_custom_permissions_for_role(role: str, custom_permissions: Optiona
         return None
     if role == "platform_admin":
         return None
-    staff_roles = {"receptionist", "housekeeping", "maintenance", "security", "restaurant"}
+    staff_roles = {"receptionist", "housekeeping", "maintenance", "security", "restaurant", "garden_staff", "garden_reception"}
     if role in staff_roles:
         return None
     if role == "owner":
@@ -32,14 +32,18 @@ def _sanitize_custom_permissions_for_role(role: str, custom_permissions: Optiona
         filtered = [m for m in custom_permissions if m in allowed]
         return filtered or None
     if role == "manager":
-        allowed = set(DEFAULT_ROLE_PERMISSIONS.get("manager", []))
+        allowed = set(DEFAULT_ROLE_PERMISSIONS.get("manager", [])) | {"manager_financial_view"}
+        filtered = [m for m in custom_permissions if m in allowed]
+        return filtered or None
+    if role == "finance":
+        allowed = set(DEFAULT_ROLE_PERMISSIONS.get("finance", []))
         filtered = [m for m in custom_permissions if m in allowed]
         return filtered or None
     return custom_permissions
 
 
 @router.get("/users")
-async def get_users(current_user: UserModel = Depends(get_current_user)):
+async def get_users(current_user: UserModel = Depends(require_module("staff"))):
     users = await db.users.find({}, {"_id": 0}).to_list(1000)
     return [UserResponse(**u) for u in users]
 
@@ -47,9 +51,10 @@ async def get_users(current_user: UserModel = Depends(get_current_user)):
 @router.post("/users")
 async def create_user(
     data: UserCreate,
+    _: UserModel = Depends(require_module("staff")),
     current_user: UserModel = Depends(require_role("admin", "platform_admin", "manager")),
 ):
-    STAFF_ROLES = {"receptionist", "housekeeping", "maintenance", "security", "restaurant"}
+    STAFF_ROLES = {"receptionist", "housekeeping", "maintenance", "security", "restaurant", "garden_staff", "garden_reception"}
     ELEVATED_ROLES = {"owner", "admin", "platform_admin"}
     MANAGER_ALLOWED = {"manager"} | STAFF_ROLES
     if current_user.role == "admin" and data.role in ELEVATED_ROLES:
@@ -70,6 +75,7 @@ async def create_user(
         phone=data.phone,
         custom_permissions=sanitized_custom,
         property_id=data.property_id,
+        property_ids=data.property_ids,
         tenant_id=data.tenant_id,
         avatar_color=random.choice(COLORS),
     )
@@ -81,6 +87,7 @@ async def create_user(
 async def update_user(
     user_id: str,
     data: UserUpdate,
+    _: UserModel = Depends(require_module("staff")),
     current_user: UserModel = Depends(require_role("admin", "platform_admin", "manager")),
 ):
     existing = await db.users.find_one({"id": user_id}, {"_id": 0})
@@ -89,7 +96,14 @@ async def update_user(
     dump = data.model_dump()
     # Decide final role after update (defaults to existing role)
     new_role = dump.get("role") or existing.get("role")
-    NULLABLE_FIELDS = {"custom_permissions", "admin_type", "staff_subtype", "property_id", "tenant_id"}
+    NULLABLE_FIELDS = {
+        "custom_permissions",
+        "admin_type",
+        "staff_subtype",
+        "property_id",
+        "property_ids",
+        "tenant_id",
+    }
     update_dict = {k: v for k, v in dump.items() if k not in NULLABLE_FIELDS and k != "password" and v is not None}
     for field in NULLABLE_FIELDS:
         if field in dump:
@@ -109,6 +123,7 @@ async def update_user(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: str,
+    _: UserModel = Depends(require_module("staff")),
     current_user: UserModel = Depends(require_role("admin", "platform_admin", "manager")),
 ):
     # Cannot delete yourself
@@ -124,12 +139,22 @@ async def delete_user(
         pass
     # Hotel admin can delete managers and all staff roles
     elif current_user.role == "admin":
-        allowed = ["manager", "receptionist", "housekeeping", "maintenance", "security", "restaurant"]
+        allowed = [
+            "manager",
+            "finance",
+            "receptionist",
+            "housekeeping",
+            "maintenance",
+            "security",
+            "restaurant",
+            "garden_staff",
+            "garden_reception",
+        ]
         if target_role not in allowed:
             raise HTTPException(status_code=403, detail="No tienes permiso para eliminar este usuario")
     # Manager can delete staff only (not other managers or admins)
     elif current_user.role == "manager":
-        allowed = ["receptionist", "housekeeping", "maintenance", "security", "restaurant"]
+        allowed = ["receptionist", "housekeeping", "maintenance", "security", "restaurant", "garden_staff", "garden_reception"]
         if target_role not in allowed:
             raise HTTPException(status_code=403, detail="No tienes permiso para eliminar este usuario")
     await db.users.delete_one({"id": user_id})

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { useProperty } from '../contexts/PropertyContext';
+import { useAuth } from '../contexts/AuthContext';
 import { BedDouble, TrendingUp, BarChart3, AlertCircle, Award, RefreshCw } from 'lucide-react';
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('es-MX')} MXN`;
@@ -42,6 +44,14 @@ export default function HotelsOverview() {
   const [hotels, setHotels] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { selectProperty } = useProperty();
+  const { user } = useAuth();
+  const isOwner = user?.role === 'owner';
+  const goHotelContext = (hotelId) => {
+    selectProperty(hotelId);
+    if (isOwner) navigate(`/owner/hotel/${hotelId}`);
+    else navigate('/rooms');
+  };
 
   const fetchData = () => {
     setLoading(true);
@@ -105,7 +115,7 @@ export default function HotelsOverview() {
               key={hotel.id}
               data-testid={`hotel-card-${hotel.id}`}
               className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-              onClick={() => navigate('/')}
+              onClick={() => goHotelContext(hotel.id)}
             >
               {/* Card header */}
               <div className="px-5 pt-5 pb-4 flex items-start justify-between border-b border-slate-100">
@@ -149,8 +159,9 @@ export default function HotelsOverview() {
                 <button
                   className="w-full mt-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors group-hover:opacity-90"
                   style={{ background: '#625746' }}
-                  onClick={e => { e.stopPropagation(); navigate('/'); }}>
-                  Ver dashboard del hotel
+                  onClick={e => { e.stopPropagation(); goHotelContext(hotel.id); }}
+                  data-testid={`hotel-cta-${hotel.id}`}>
+                  {isOwner ? 'Ver resumen del hotel' : 'Ver habitaciones del hotel'}
                 </button>
               </div>
             </div>

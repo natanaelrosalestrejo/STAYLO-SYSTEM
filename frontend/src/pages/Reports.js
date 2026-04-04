@@ -1,5 +1,14 @@
+/**
+ * Reportes por rol:
+ * - owner: vista amplia (estratégica / consolidada) + operativo cuando aplica.
+ * - finance: hogar financiero; solo secciones de ingresos/cobros/desgloses; sin widgets operativos de habitación.
+ * - manager con solo manager_financial_view: mismo alcance acotado que finance (sin módulo reports).
+ * - manager/admin con módulo reports: informe completo; textos acotados a propiedades si no es owner.
+ */
 import { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
+import { routeSatisfiedByModules } from '../utils/permissions';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { TrendingUp, BedDouble, Users, CalendarCheck, Hotel, CalendarDays, Download, Globe, Phone, MessageCircle } from 'lucide-react';
 
@@ -25,14 +34,42 @@ const KpiCard = ({ label, value, sub, icon: Icon, color, bgColor }) => (
 );
 
 export default function Reports() {
+  const { user } = useAuth();
+  const role = user?.role;
+  const mods = Array.isArray(user?.modules) ? user.modules : [];
+  const isFinance = role === 'finance';
+  const isOwner = role === 'owner';
+  const isAdmin = role === 'admin';
+  const hasFullReportsModule = mods.includes('reports');
+  const hasManagerFinancialView = mods.includes('manager_financial_view');
+  const canExportCsv = routeSatisfiedByModules(mods, 'reports');
+  /** Sin /reports/dashboard: solo ingresos/cobros/desgloses (finance o gerente solo con vista financiera). */
+  const narrowFinancialUi =
+    isFinance || (role === 'manager' && hasManagerFinancialView && !hasFullReportsModule);
+  /** Copy de portafolio / consolidado (alineado con scope amplio owner+admin en backend). */
+  const strategicPortfolioCopy = isOwner || isAdmin;
+
   const [stats, setStats] = useState(null);
   const [occupancy, setOccupancy] = useState(null);
   const [revenue, setRevenue] = useState(null);
   const [insights, setInsights] = useState(null);
 
   useEffect(() => {
+    if (!user) return;
     const fetchAll = async () => {
       try {
+        if (narrowFinancialUi) {
+          setStats(null);
+          const [o, r, i] = await Promise.all([
+            api.get('/reports/occupancy'),
+            api.get('/reports/revenue-breakdown'),
+            api.get('/reports/insights'),
+          ]);
+          setOccupancy(o.data);
+          setRevenue(r.data);
+          setInsights(i.data);
+          return;
+        }
         const [s, o, r, i] = await Promise.all([
           api.get('/reports/dashboard'),
           api.get('/reports/occupancy'),
@@ -46,9 +83,10 @@ export default function Reports() {
       } catch (e) {}
     };
     fetchAll();
-  }, []);
+  }, [user, narrowFinancialUi]);
 
   const handleExportCSV = () => {
+    if (!canExportCsv) return;
     window.open(`${process.env.REACT_APP_BACKEND_URL}/api/reports/export/csv`, '_blank');
   };
 
@@ -68,23 +106,40 @@ export default function Reports() {
   const hotelPct = totalRev > 0 ? Math.round((revenue?.hotel_revenue / totalRev) * 100) : 0;
   const eventPct = totalRev > 0 ? Math.round((revenue?.event_revenue / totalRev) * 100) : 0;
 
+  const revenueHotelLabel = strategicPortfolioCopy ? 'POR HOTEL' : 'HOSPEDAJE';
+  const revenueTotalFootnote = strategicPortfolioCopy ? 'MXN · hotel + eventos' : 'MXN · alcance asignado en el sistema';
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>Reportes y Estadísticas</h1>
-          <p className="text-sm text-slate-500">Análisis del rendimiento del hotel</p>
+          <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            {isFinance ? 'Reportes financieros' : 'Reportes y Estadísticas'}
+          </h1>
+          <p className="text-sm text-slate-500">
+            {isFinance
+              ? 'Ingresos, cobros y desgloses. Este es tu espacio principal de análisis financiero.'
+              : strategicPortfolioCopy
+                ? 'Análisis del rendimiento del hotel — vista consolidada estratégica y operativa.'
+                : 'Indicadores según el alcance de tus propiedades asignadas (financiero y operativo donde aplica).'}
+          </p>
         </div>
+        {canExportCsv ? (
         <button data-testid="export-csv-btn" onClick={handleExportCSV}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all hover:bg-slate-100"
           style={{ border: '1px solid #e2e8f0', color: '#475569' }}>
           <Download size={15} /> Exportar CSV
         </button>
+        ) : (
+        <span data-testid="export-csv-unavailable" className="text-xs text-slate-400" title="Tu perfil no incluye exportación CSV (módulo reportes).">
+          Exportación CSV no disponible
+        </span>
+        )}
       </div>
 
       {/* Revenue Insights */}
       {insights && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className={`grid grid-cols-2 gap-3 ${narrowFinancialUi ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">Ingresos este mes</p>
             <p className="text-xl font-bold text-slate-900">${(insights.month_revenue || 0).toLocaleString('es-MX')}</p>
@@ -95,11 +150,13 @@ export default function Reports() {
             <p className="text-xl font-bold text-emerald-700">${(insights.projected_month_revenue || 0).toLocaleString('es-MX')}</p>
             <p className="text-xs text-slate-400 mt-1">estimado</p>
           </div>
+          {!narrowFinancialUi && (
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">Ingresos perdidos (cuartos vacíos)</p>
             <p className="text-xl font-bold text-red-500">${(insights.estimated_lost_revenue || 0).toLocaleString('es-MX')}</p>
             <p className="text-xs text-slate-400 mt-1">oportunidad</p>
           </div>
+          )}
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <p className="text-xs text-slate-400 mb-1">Cobros pendientes</p>
             <p className="text-xl font-bold text-amber-600">${(insights.pending_payments_amount || 0).toLocaleString('es-MX')}</p>
@@ -119,7 +176,7 @@ export default function Reports() {
               <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'rgba(252,245,224,0.15)' }}>
                 <Hotel size={15} style={{ color: '#d2c7b6' }} strokeWidth={1.5} />
               </div>
-              <span style={{ color: '#d2c7b6', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', fontFamily: 'Montserrat, sans-serif' }}>POR HOTEL</span>
+              <span style={{ color: '#d2c7b6', fontSize: '11px', fontWeight: 600, letterSpacing: '0.12em', fontFamily: 'Montserrat, sans-serif' }}>{revenueHotelLabel}</span>
             </div>
             <p className="font-bold" style={{ color: '#fcf5e0', fontSize: '26px', fontFamily: 'Manrope, sans-serif' }}>
               ${(revenue?.hotel_revenue || 0).toLocaleString('es-MX')}
@@ -152,7 +209,7 @@ export default function Reports() {
             <p className="font-bold" style={{ color: '#fcf5e0', fontSize: '26px', fontFamily: 'Manrope, sans-serif' }}>
               ${totalRev.toLocaleString('es-MX')}
             </p>
-            <p style={{ color: 'rgba(252,245,224,0.6)', fontSize: '12px', marginTop: 4 }}>MXN · hotel + eventos</p>
+            <p style={{ color: 'rgba(252,245,224,0.6)', fontSize: '12px', marginTop: 4 }}>{revenueTotalFootnote}</p>
           </div>
         </div>
         {totalRev > 0 && (
@@ -169,10 +226,12 @@ export default function Reports() {
         )}
       </div>
 
-      {/* Source breakdown */}
+      {/* Desglose por canal (ingresos) */}
       {insights?.source_breakdown?.length > 0 && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5" data-testid="source-breakdown">
-          <h3 className="font-semibold text-slate-800 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>Origen de Reservas</h3>
+          <h3 className="font-semibold text-slate-800 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            {narrowFinancialUi ? 'Ingresos por canal' : 'Origen de Reservas'}
+          </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {insights.source_breakdown.map(s => {
               const Icon = SOURCE_ICONS[s.source] || Phone;
@@ -195,7 +254,9 @@ export default function Reports() {
       {(revenue?.events_breakdown?.length > 0) ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden" data-testid="events-breakdown-table">
           <div className="px-5 py-4 border-b border-slate-100">
-            <h3 className="font-semibold text-slate-800" style={{ fontFamily: 'Manrope, sans-serif' }}>Impacto por Evento</h3>
+            <h3 className="font-semibold text-slate-800" style={{ fontFamily: 'Manrope, sans-serif' }}>
+              {narrowFinancialUi ? 'Ingresos vinculados a eventos' : 'Impacto por Evento'}
+            </h3>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-slate-50"><tr>{['Evento','Reservas','Ingresos','% del total'].map(h=><th key={h} className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>)}</tr></thead>
@@ -211,23 +272,26 @@ export default function Reports() {
             </tbody>
           </table>
         </div>
-      ) : (
+      ) : !narrowFinancialUi ? (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
           <h3 className="font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>Impacto por Evento</h3>
           <p className="text-sm text-slate-400">Aquí aparecerán los eventos cuando los huéspedes indiquen a qué evento vienen al reservar.</p>
         </div>
-      )}
+      ) : null}
 
-      {/* KPIs generales */}
+      {/* KPIs operativos desde /reports/dashboard */}
+      {!narrowFinancialUi && (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KpiCard label="Total Reservas" value={stats?.total_reservations || 0} icon={CalendarCheck} bgColor="bg-blue-50" color="text-blue-600" />
         <KpiCard label="Ocupación Actual" value={`${stats?.occupancy_rate || 0}%`} icon={BedDouble} bgColor="bg-violet-50" color="text-violet-600" />
         <KpiCard label="Huéspedes Registrados" value={stats?.total_guests || 0} icon={Users} bgColor="bg-amber-50" color="text-amber-600" />
         <KpiCard label="Cobros Pendientes" value={stats?.pending_payments || 0} icon={TrendingUp} bgColor="bg-red-50" color="text-red-500" sub={stats?.pending_payments > 0 ? 'Por cobrar en hotel' : 'Todo al día'} />
       </div>
+      )}
 
-      {/* Monthly Charts */}
+      {/* Gráficas mensuales */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {!narrowFinancialUi && (
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>Reservas Mensuales</h3>
           {monthlyData.length === 0 ? (<div className="h-48 flex items-center justify-center text-slate-400 text-sm">Sin datos aún</div>) : (
@@ -242,6 +306,7 @@ export default function Reports() {
             </ResponsiveContainer>
           )}
         </div>
+        )}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>Ingresos Mensuales (MXN)</h3>
           {monthlyData.length === 0 ? (<div className="h-48 flex items-center justify-center text-slate-400 text-sm">Sin datos aún</div>) : (
@@ -258,6 +323,7 @@ export default function Reports() {
         </div>
       </div>
 
+      {!narrowFinancialUi && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h3 className="font-semibold text-slate-800 mb-4" style={{ fontFamily: 'Manrope, sans-serif' }}>Tipos de Habitación</h3>
@@ -280,6 +346,7 @@ export default function Reports() {
           </ResponsiveContainer>
         </div>
       </div>
+      )}
     </div>
   );
 }

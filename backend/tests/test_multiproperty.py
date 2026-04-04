@@ -18,12 +18,13 @@ def headers(auth_token):
 class TestProperties:
     """Tests for /api/properties"""
 
-    def test_get_properties_returns_two(self, headers):
+    def test_get_properties_returns_canonical_demo_count(self, headers):
         res = requests.get(f"{BASE_URL}/api/properties", headers=headers)
         assert res.status_code == 200
         data = res.json()
         assert isinstance(data, list)
-        assert len(data) == 2
+        # Canonical demo: 1 hotel + 2 event gardens (seeds/run.py + reset_staylo_demo.py)
+        assert len(data) == 3
 
     def test_properties_have_required_fields(self, headers):
         res = requests.get(f"{BASE_URL}/api/properties", headers=headers)
@@ -45,12 +46,12 @@ class TestProperties:
 class TestEventSpaces:
     """Tests for /api/event-spaces"""
 
-    def test_get_event_spaces_returns_three(self, headers):
+    def test_get_event_spaces_returns_canonical_demo_count(self, headers):
         res = requests.get(f"{BASE_URL}/api/event-spaces", headers=headers)
         assert res.status_code == 200
         data = res.json()
         assert isinstance(data, list)
-        assert len(data) == 3
+        assert len(data) == 4
 
     def test_event_spaces_have_required_fields(self, headers):
         res = requests.get(f"{BASE_URL}/api/event-spaces", headers=headers)

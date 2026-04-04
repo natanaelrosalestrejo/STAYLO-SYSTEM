@@ -1,4 +1,6 @@
-# STAYLO — Permissions Architecture
+# STAYLO — Permissions product model
+
+*(Antes `docs/permissions-architecture.md`; referencia canónica de roles y módulos en producto y código.)*
 
 This document is the single reference for how permissions work in code and product. It aligns with the hybrid model: **Platform Admin > Permisos** = global role templates; **Platform Admin > Usuarios** = per-user overrides; **backend** = source of truth for effective modules.
 

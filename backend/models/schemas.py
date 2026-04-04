@@ -3,7 +3,7 @@ Pydantic models and role-permission defaults for the STAYLO API.
 No dependencies on server, routers, or db — safe to import from anywhere.
 """
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 import uuid
 
 from pydantic import BaseModel, Field
@@ -24,6 +24,8 @@ class UserModel(BaseModel):
     avatar_color: str = "#059669"
     custom_permissions: Optional[List[str]] = None
     property_id: Optional[str] = None
+    # Non-empty property_ids take priority over property_id for assigned-property scope resolution.
+    property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -39,6 +41,7 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     custom_permissions: Optional[List[str]] = None
     property_id: Optional[str] = None
+    property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
 
 
@@ -53,6 +56,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     custom_permissions: Optional[List[str]] = None
     property_id: Optional[str] = None
+    property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
     password: Optional[str] = None
 
@@ -71,6 +75,7 @@ class UserResponse(BaseModel):
     admin_type: Optional[str] = None
     staff_subtype: Optional[str] = None
     property_id: Optional[str] = None
+    property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
 
 
@@ -325,6 +330,8 @@ class EventBookingModel(BaseModel):
     payment_status: str = "pending"  # pending | paid
     notes: Optional[str] = None
     reservation_source: str = "reception"
+    lodging_integration_enabled: bool = False
+    lodging_summary: dict = {}
     created_by: str = "admin"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -342,6 +349,64 @@ class EventBookingCreate(BaseModel):
     booking_status: str = "confirmed"
     notes: Optional[str] = None
     reservation_source: str = "reception"
+    lodging_integration_enabled: bool = False
+
+
+class EventRoomBlockModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_booking_id: str
+    property_id: str
+    target_room_count: int = 0
+    blocked_room_count: int = 0
+    status: str = "active"  # active | released | cancelled
+    notes: Optional[str] = None
+    created_by: str = "admin"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class EventLodgingAssignmentModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_booking_id: str
+    event_room_block_id: Optional[str] = None
+    room_id: str
+    room_property_id: str
+    assignment_type: str = "guest_block"  # special_role | guest_block
+    special_role: Optional[str] = None  # bride | groom | parents | close_family
+    assignment_status: str = "held"  # held | reserved | released | cancelled
+    check_in_date: Optional[str] = None
+    check_out_date: Optional[str] = None
+    reservation_id: Optional[str] = None
+    notes: Optional[str] = None
+    created_by: str = "admin"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class EventLodgingSpecialRoom(BaseModel):
+    special_role: str  # bride | groom | parents | close_family
+    room_id: Optional[str] = None
+
+
+class EventLodgingSetupRequest(BaseModel):
+    lodging_integration_enabled: bool = True
+    check_in_date: Optional[str] = None
+    check_out_date: Optional[str] = None
+    special_rooms: List[EventLodgingSpecialRoom] = []
+    guest_block_count: int = 0
+    notes: Optional[str] = None
+
+
+# ----- Tenant module config (RFC v1: permission-resolution-rfc.md) -----
+class TenantModuleConfigModel(BaseModel):
+    """Whitelist of module keys enabled for the entire tenant."""
+
+    schema_version: int = 1
+    mode: str = "whitelist"
+    enabled_modules: List[str]
+    updated_at: str
+    updated_by_user_id: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
 
 
 # ----- Tenant -----
@@ -358,6 +423,7 @@ class TenantModel(BaseModel):
     tenant_status: str = "Activo"  # Activo | Suspendido | Inactivo | En gracia
     internal_notes: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    module_config: Optional[TenantModuleConfigModel] = None
 
 
 class TenantCreate(BaseModel):
@@ -415,14 +481,85 @@ class AmenityCreate(BaseModel):
 
 DEFAULT_ROLE_PERMISSIONS = {
     "platform_admin": ["platform_admin"],
-    "admin": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog", "reports", "staff", "properties"],
-    "owner": ["corporate", "hotels", "event-gardens", "reports"],
-    "manager": ["dashboard", "reservations", "rooms", "guests", "jardines", "hotel-events", "inbox", "tasks", "catalog", "reports", "staff", "room-types"],
-    "receptionist": ["dashboard", "reservations", "rooms", "guests", "jardines", "inbox", "tasks", "catalog"],
+    "admin": [
+        "corporate",
+        "hotels",
+        "event-gardens",
+        "dashboard",
+        "reservations",
+        "rooms",
+        "guests",
+        "jardines",
+        "hotel-events",
+        "inbox",
+        "tasks",
+        "catalog",
+        "reports",
+        "staff",
+        "properties",
+    ],
+    "owner": [
+        "corporate",
+        "hotels",
+        "event-gardens",
+        "reports",
+        "dashboard",
+        "reservations",
+        "rooms",
+        "guests",
+        "jardines",
+        "hotel-events",
+        "catalog",
+    ],
+    "manager": ["dashboard", "reservations", "rooms", "guests", "jardines", "hotel-events", "inbox", "tasks", "catalog", "staff", "room-types"],
+    "finance": ["reports", "dashboard"],
+    "receptionist": ["dashboard", "reservations", "rooms", "guests", "inbox", "tasks", "catalog"],
     "housekeeping": ["inbox", "tasks"],
     "maintenance": ["inbox", "tasks"],
     "security": ["inbox", "tasks"],
     "restaurant": ["inbox", "tasks"],
+    "garden_admin": [
+        "garden_dashboard",
+        "garden_event_bookings",
+        "garden_event_spaces",
+        "garden_lodging_integration",
+        "garden_guest_list",
+        "garden_sales",
+        "inbox",
+        "tasks",
+        "reports",
+        "staff",
+    ],
+    "garden_manager": [
+        "garden_dashboard",
+        "garden_event_bookings",
+        "garden_event_spaces",
+        "garden_lodging_integration",
+        "garden_guest_list",
+        "inbox",
+        "tasks",
+        "reports",
+        "staff",
+    ],
+    "garden_sales": [
+        "garden_dashboard",
+        "garden_event_bookings",
+        "garden_guest_list",
+        "garden_sales",
+        "inbox",
+        "tasks",
+        "reports",
+    ],
+    "garden_reception": [
+        "garden_guest_list",
+        "garden_event_bookings",
+        "inbox",
+        "tasks",
+    ],
+    "garden_staff": [
+        "inbox",
+        "tasks",
+    ],
 }
 
 

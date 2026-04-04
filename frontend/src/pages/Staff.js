@@ -7,6 +7,7 @@ import { Plus, Edit2, UserX, UserCheck, X, Shield, ChevronDown, ChevronUp, Trash
 // ─── Role structure for hotel/property context ─────────────────
 const ROLE_GROUPS = [
   { group: 'manager', label: 'Gerente', subTypes: null },
+  { group: 'finance', label: 'Finanzas', subTypes: null },
   {
     group: 'staff',
     label: 'Staff',
@@ -21,10 +22,11 @@ const ROLE_GROUPS = [
 ];
 
 // Roles that belong to hotel/property context (no platform_admin, no admin)
-const PROPERTY_STAFF_ROLES = ['manager', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'];
+const PROPERTY_STAFF_ROLES = ['manager', 'finance', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'];
 
 const ALL_ROLES = [
   { value: 'manager',      label: 'Gerente',               color: 'bg-emerald-100 text-emerald-700' },
+  { value: 'finance',      label: 'Finanzas',              color: 'bg-cyan-100 text-cyan-800' },
   { value: 'receptionist', label: 'Staff — Recepción',     color: 'bg-blue-100 text-blue-700' },
   { value: 'housekeeping', label: 'Staff — Limpieza',      color: 'bg-amber-100 text-amber-700' },
   { value: 'maintenance',  label: 'Staff — Mantenimiento', color: 'bg-orange-100 text-orange-700' },
@@ -42,6 +44,7 @@ const ALL_MODULES = [
   { key: 'tasks',         label: 'Tareas' },
   { key: 'catalog',       label: 'Catálogo' },
   { key: 'reports',       label: 'Reportes' },
+  { key: 'manager_financial_view', label: 'Vista financiera (gerente, propiedades asignadas)' },
   { key: 'staff',         label: 'Personal' },
   { key: 'properties',    label: 'Propiedades' },
   { key: 'corporate',     label: 'Dashboard Corp.' },
@@ -51,12 +54,14 @@ const ALL_MODULES = [
 
 const groupFromRole = (role) => {
   if (role === 'manager') return { group: 'manager', subType: null };
+  if (role === 'finance') return { group: 'finance', subType: null };
   if (PROPERTY_STAFF_ROLES.includes(role)) return { group: 'staff', subType: role };
   return { group: 'manager', subType: null };
 };
 
 const resolveRole = (group, subType) => {
   if (group === 'manager') return 'manager';
+  if (group === 'finance') return 'finance';
   return subType;
 };
 
@@ -162,7 +167,7 @@ export default function Staff() {
     if (currentUser.id === targetUser.id) return false;
     if (currentUser.role === 'platform_admin') return true;
     if (currentUser.role === 'admin') {
-      return ['manager','receptionist','housekeeping','maintenance','security','restaurant'].includes(targetUser.role);
+      return ['manager', 'finance', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(targetUser.role);
     }
     if (currentUser.role === 'manager') {
       return ['receptionist','housekeeping','maintenance','security','restaurant'].includes(targetUser.role);
@@ -184,7 +189,7 @@ export default function Staff() {
   const getRoleCfg = (role) =>
     ALL_ROLES.find(r => r.value === role) || { label: role, color: 'bg-slate-100 text-slate-600' };
 
-  // Only show property-level staff (filter out platform & hotel admins)
+  // Only show property-level staff (filter out platform & group admins)
   const filteredByRole = staff.filter(s => PROPERTY_STAFF_ROLES.includes(s.role));
   const visibleStaff = roleFilter === 'all'
     ? filteredByRole

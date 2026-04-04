@@ -200,12 +200,12 @@ export default function BookingWizard() {
       {/* Header */}
       <div className="px-6 py-4 flex items-center justify-between sticky top-0 z-10 shadow-sm" style={{ background: 'white', borderBottom: '1px solid #e8dfd5' }}>
         <Link to="/catalogo" className="flex items-center gap-3" style={{ textDecoration: 'none' }}>
-          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: '1px solid rgba(98,87,70,0.3)' }}>
-            <span style={{ fontFamily: 'Georgia, serif', color: '#625746', fontSize: '14px', fontStyle: 'italic' }}>ab</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ border: '1px solid rgba(98,87,70,0.25)', background: 'rgba(98,87,70,0.06)' }}>
+            <span style={{ fontFamily: 'Manrope, sans-serif', color: '#625746', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em' }}>S</span>
           </div>
           <div>
-            <span style={{ fontFamily: 'Georgia, serif', color: '#625746', fontSize: '18px', letterSpacing: '0.05em' }}>alma</span>
-            <span style={{ color: '#917a6a', fontSize: '10px', letterSpacing: '0.18em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginLeft: '6px' }}>HOTEL BOUTIQUE</span>
+            <span style={{ fontFamily: 'Manrope, sans-serif', color: '#625746', fontSize: '16px', fontWeight: 700, letterSpacing: '0.04em' }}>STAYLO</span>
+            <span style={{ color: '#917a6a', fontSize: '10px', letterSpacing: '0.06em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginLeft: '8px' }}>Reservas</span>
           </div>
         </Link>
         <div className="flex items-center gap-4">
@@ -594,7 +594,7 @@ export default function BookingWizard() {
                   <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(252,245,224,0.2)' }}>
                     <Check size={32} color="#fcf5e0" strokeWidth={2} />
                   </div>
-                  <p style={{ color: '#d2c7b6', fontSize: '11px', letterSpacing: '0.3em', marginBottom: 8 }}>ALMA HOTEL BOUTIQUE</p>
+                  <p style={{ color: '#d2c7b6', fontSize: '11px', letterSpacing: '0.2em', marginBottom: 8 }}>STAYLO</p>
                   <h2 style={{ fontFamily: 'Georgia, serif', color: '#fcf5e0', fontSize: '30px', fontWeight: 300, marginBottom: 8 }}>¡Reserva confirmada!</h2>
                   <p style={{ color: 'rgba(210,199,182,0.85)', fontSize: '13px' }}>Referencia: <strong style={{ color: '#fcf5e0' }}>#{confirmation.booking_ref}</strong></p>
                 </div>

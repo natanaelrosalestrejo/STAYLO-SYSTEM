@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from auth import get_current_user
+from auth import require_module
 from db import db
 from models import TaskCreate, TaskModel, UserModel
 
@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/tasks")
-async def get_tasks(current_user: UserModel = Depends(get_current_user)):
+async def get_tasks(current_user: UserModel = Depends(require_module("tasks"))):
     if current_user.role in ["admin", "receptionist", "manager"]:
         return await db.tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return await db.tasks.find(
@@ -24,7 +24,7 @@ async def get_tasks(current_user: UserModel = Depends(get_current_user)):
 
 @router.post("/tasks")
 async def create_task(
-    data: TaskCreate, current_user: UserModel = Depends(get_current_user)
+    data: TaskCreate, current_user: UserModel = Depends(require_module("tasks"))
 ):
     assigned_to_name = None
     if data.assigned_to:
@@ -55,7 +55,7 @@ async def create_task(
 
 @router.patch("/tasks/{task_id}/status")
 async def update_task_status(
-    task_id: str, data: dict, current_user: UserModel = Depends(get_current_user)
+    task_id: str, data: dict, current_user: UserModel = Depends(require_module("tasks"))
 ):
     result = await db.tasks.find_one_and_update(
         {"id": task_id},
@@ -75,7 +75,7 @@ async def update_task_status(
 
 @router.delete("/tasks/{task_id}")
 async def delete_task(
-    task_id: str, current_user: UserModel = Depends(get_current_user)
+    task_id: str, current_user: UserModel = Depends(require_module("tasks"))
 ):
     await db.tasks.delete_one({"id": task_id})
     return {"message": "Tarea eliminada"}

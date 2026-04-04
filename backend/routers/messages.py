@@ -5,7 +5,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from auth import get_current_user
+from auth import require_module
 from db import db
 from models import MessageCreate, MessageModel, UserModel
 
@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/messages/unread-count")
-async def unread_count(current_user: UserModel = Depends(get_current_user)):
+async def unread_count(current_user: UserModel = Depends(require_module("inbox"))):
     count = await db.messages.count_documents(
         {"receiver_id": current_user.id, "is_read": False}
     )
@@ -21,7 +21,7 @@ async def unread_count(current_user: UserModel = Depends(get_current_user)):
 
 
 @router.get("/messages")
-async def get_messages(current_user: UserModel = Depends(get_current_user)):
+async def get_messages(current_user: UserModel = Depends(require_module("inbox"))):
     msgs = await db.messages.find(
         {"$or": [{"sender_id": current_user.id}, {"receiver_id": current_user.id}]},
         {"_id": 0},
@@ -31,7 +31,7 @@ async def get_messages(current_user: UserModel = Depends(get_current_user)):
 
 @router.post("/messages")
 async def create_message(
-    data: MessageCreate, current_user: UserModel = Depends(get_current_user)
+    data: MessageCreate, current_user: UserModel = Depends(require_module("inbox"))
 ):
     receiver_name = None
     receiver = await db.users.find_one({"id": data.receiver_id})
@@ -60,6 +60,6 @@ async def create_message(
 
 
 @router.patch("/messages/{msg_id}/read")
-async def mark_read(msg_id: str, current_user: UserModel = Depends(get_current_user)):
+async def mark_read(msg_id: str, current_user: UserModel = Depends(require_module("inbox"))):
     await db.messages.update_one({"id": msg_id}, {"$set": {"is_read": True}})
     return {"message": "Marcado como leído"}

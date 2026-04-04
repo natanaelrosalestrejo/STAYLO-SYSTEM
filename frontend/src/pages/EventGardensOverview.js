@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { useProperty } from '../contexts/PropertyContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, TrendingUp, Calendar, AlertCircle, RefreshCw, Clock } from 'lucide-react';
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('es-MX')} MXN`;
@@ -29,6 +31,15 @@ export default function EventGardensOverview() {
   const [gardens, setGardens] = useState([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const { selectProperty } = useProperty();
+  const { user } = useAuth();
+  const isOwner = user?.role === 'owner';
+
+  const goGardenContext = (gardenId) => {
+    selectProperty(gardenId);
+    if (isOwner) navigate(`/owner/garden/${gardenId}`);
+    else navigate(`/jardines?propertyId=${gardenId}`);
+  };
 
   const fetchData = () => {
     setLoading(true);
@@ -92,7 +103,7 @@ export default function EventGardensOverview() {
               key={garden.id}
               data-testid={`garden-card-${garden.id}`}
               className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer group"
-              onClick={() => navigate('/jardines')}
+              onClick={() => goGardenContext(garden.id)}
             >
               {/* Card header */}
               <div className="px-5 pt-5 pb-4 flex items-start justify-between border-b border-slate-100">
@@ -141,8 +152,8 @@ export default function EventGardensOverview() {
                 <button
                   className="w-full mt-1 py-2 rounded-lg text-xs font-semibold text-white transition-colors group-hover:opacity-90"
                   style={{ background: '#625746' }}
-                  onClick={e => { e.stopPropagation(); navigate('/jardines'); }}>
-                  Ver gestión del jardín
+                  onClick={e => { e.stopPropagation(); goGardenContext(garden.id); }}>
+                  {isOwner ? 'Ver resumen del jardín' : 'Abrir gestión de eventos'}
                 </button>
               </div>
             </div>

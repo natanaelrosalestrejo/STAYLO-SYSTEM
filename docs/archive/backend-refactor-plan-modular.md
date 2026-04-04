@@ -1,3 +1,8 @@
+> **Archived document.** Plan inicial de modularización; el trabajo real posterior está resumido en [architecture-backend-status.md](../architecture-backend-status.md).  
+> Solo referencia histórica.
+
+---
+
 # Backend Modular Refactor Plan — server.py
 
 **Purpose:** Split `backend/server.py` (~2125 lines) into maintainable modules while preserving API behavior, auth, payments, and tenant/property isolation. No route changes, no schema changes, no frontend changes.

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../utils/api';
+import { getDefaultPathForRole } from '../utils/permissions';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Lock, Mail, Layers } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
   { email: 'platform@almasystem.com', password: 'platform123', role: 'Platform Admin' },
-  { email: 'admin@hotel.com', password: 'admin123', role: 'Hotel Admin' },
+  { email: 'admin@hotel.com', password: 'admin123', role: 'Administrador de grupo' },
   { email: 'owner@hotel.com', password: 'owner123', role: 'Owner' },
   { email: 'maria@hotel.com', password: 'recep123', role: 'Recepción' },
 ];
@@ -30,8 +31,7 @@ export default function Login() {
       toast.success(`Bienvenido, ${res.data.user.name}`);
       const role = res.data.user.role;
       if (role === 'platform_admin') navigate('/platform-admin');
-      else if (role === 'owner') navigate('/corporate');
-      else navigate('/');
+      else navigate(getDefaultPathForRole(res.data.user));
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Credenciales incorrectas');
     } finally { setLoading(false); }

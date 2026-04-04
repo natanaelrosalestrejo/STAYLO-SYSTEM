@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -6,7 +7,7 @@ import {
 } from 'recharts';
 import {
   TrendingUp, DollarSign, Target, BedDouble, AlertTriangle, Award,
-  ArrowUpRight, ArrowDownRight, Minus, Sparkles, RefreshCw, Lightbulb
+  ArrowUpRight, ArrowDownRight, Minus, Sparkles, RefreshCw, Lightbulb, Bell, Home
 } from 'lucide-react';
 
 // ─── helpers ────────────────────────────────────────────────
@@ -76,9 +77,17 @@ const ScoreRing = ({ score, label }) => {
 
 // ─── Main component ──────────────────────────────────────────
 export default function CorporateDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats]           = useState(null);
   const [loading, setLoading]       = useState(true);
   const [lastUpdated, setLastUpdated] = useState(null);
+
+  const goToGardenEvent = (ev) => {
+    const q = new URLSearchParams();
+    if (ev.property_id) q.set('propertyId', ev.property_id);
+    q.set('eventId', ev.id);
+    navigate(`/jardines?${q.toString()}`);
+  };
 
   const fetchData = () => {
     setLoading(true);
@@ -106,6 +115,11 @@ export default function CorporateDashboard() {
   const sources = ri.source_breakdown     || [];
   const growth  = group.revenue_growth_pct ?? 0;
   const maxSrc  = Math.max(...sources.map(s => s.count), 1);
+  const chartLabels = stats?.chart_labels || {};
+  const pendingBreakdown = stats?.pending_breakdown || {};
+  const upcomingEvents = stats?.upcoming_events || [];
+  const lodgingSummary = stats?.lodging_summary || {};
+  const businessAlerts = stats?.alerts || [];
 
   // ── render ────────────────────────────────────────────────
   return (
@@ -133,6 +147,33 @@ export default function CorporateDashboard() {
           Actualizar
         </button>
       </div>
+
+      {/* ── Alertas de negocio ─────────────────────────────── */}
+      {businessAlerts.length > 0 && (
+        <div data-testid="corp-alerts" className="rounded-xl border border-amber-200 bg-amber-50/80 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-amber-100 flex items-center gap-2">
+            <Bell size={16} className="text-amber-700" />
+            <h2 className="text-sm font-semibold text-amber-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
+              Alertas
+            </h2>
+          </div>
+          <ul className="px-4 py-3 space-y-2">
+            {businessAlerts.map((a, i) => (
+              <li
+                key={`${a.type}-${a.ref_id ?? i}`}
+                className={`text-sm flex gap-2 rounded-lg px-3 py-2 ${
+                  a.severity === 'warning' ? 'bg-white border border-amber-100 text-slate-800' : 'bg-white/60 text-slate-700'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                  a.severity === 'warning' ? 'bg-amber-500' : 'bg-slate-400'
+                }`} />
+                <span>{a.message}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* ── Row 1: Revenue KPIs (4) ─────────────────────────── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
@@ -189,13 +230,128 @@ export default function CorporateDashboard() {
           icon={Award} accent="amber" testId="corp-best-garden"
         />
         <MetricCard
-          label="Cobros Pendientes"
+          label="Registros con cobro pendiente"
           value={group.pending_payments ?? 0}
-          sub="Todas las propiedades"
+          sub="Hotel y eventos (conteo)"
           icon={AlertTriangle}
           accent={(group.pending_payments ?? 0) > 0 ? 'red' : 'muted'}
           testId="corp-pending"
         />
+      </div>
+
+      {/* ── Pagos pendientes (montos MXN) ───────────────────── */}
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-slate-700" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          Pagos pendientes (MXN)
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <MetricCard
+            label="Total pendiente"
+            value={fmt(pendingBreakdown.total_pending_amount)}
+            sub="Suma hotel + eventos"
+            icon={DollarSign}
+            accent={(pendingBreakdown.total_pending_amount ?? 0) > 0 ? 'red' : 'muted'}
+            testId="corp-pending-total-mxn"
+          />
+          <MetricCard
+            label="Hotel"
+            value={fmt(pendingBreakdown.hotel_pending_amount)}
+            sub="Reservas con pago pendiente"
+            icon={Home}
+            accent="blue"
+            testId="corp-pending-hotel-mxn"
+          />
+          <MetricCard
+            label="Eventos"
+            value={fmt(pendingBreakdown.event_pending_amount)}
+            sub="Contratos con pago pendiente"
+            icon={Sparkles}
+            accent="violet"
+            testId="corp-pending-event-mxn"
+          />
+        </div>
+      </div>
+
+      {/* ── Próximos eventos ───────────────────────────────────── */}
+      <div data-testid="corp-upcoming-events" className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h2 className="font-semibold text-slate-800" style={{ fontFamily: 'Manrope, sans-serif' }}>
+            Próximos eventos
+          </h2>
+          <p className="text-xs text-slate-400 mt-0.5">Clic en una fila para abrir el evento en gestión de jardines</p>
+        </div>
+        {upcomingEvents.length === 0 ? (
+          <div className="px-5 py-10 text-center text-slate-400 text-sm">Sin eventos próximos</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 text-left text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                  <th className="px-4 py-3">Fecha</th>
+                  <th className="px-4 py-3">Evento / espacio</th>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3">Propiedad</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                  <th className="px-4 py-3 text-right">Pagado</th>
+                  <th className="px-4 py-3 text-right">Pendiente</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {upcomingEvents.map((ev) => (
+                  <tr
+                    key={ev.id}
+                    role="button"
+                    tabIndex={0}
+                    className="hover:bg-slate-50/80 cursor-pointer"
+                    onClick={() => goToGardenEvent(ev)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goToGardenEvent(ev); } }}
+                  >
+                    <td className="px-4 py-3 text-slate-700 whitespace-nowrap">{ev.event_date}</td>
+                    <td className="px-4 py-3 text-slate-800 font-medium">{ev.event_name}</td>
+                    <td className="px-4 py-3 text-slate-600">{ev.client_name || '—'}</td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{ev.property_name}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">{fmt(ev.total_price)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-emerald-700">{fmt(ev.paid_amount)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-amber-700">{fmt(ev.pending_amount)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Hospedaje ligado a eventos ───────────────────────── */}
+      <div data-testid="corp-lodging-summary" className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <h2 className="font-semibold text-slate-800 mb-1" style={{ fontFamily: 'Manrope, sans-serif' }}>
+          Hospedaje ligado a eventos
+        </h2>
+        <p className="text-xs text-slate-400 mb-4">
+          Asignaciones de habitaciones por evento (held / reserved) en el alcance de sus propiedades. Ingreso estimado: proxy por tarifa × noches.
+        </p>
+        {((lodgingSummary.no_assignments_in_scope === true) || Number(lodgingSummary.total_assignments) === 0) && (
+          <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            Aún no hay habitaciones asignadas a eventos en sus propiedades. Cuando active la integración de hospedaje en un evento del jardín, aquí verá el resumen (las habitaciones deben ser de la misma propiedad que el evento).
+          </div>
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center">
+          {[
+            { k: 'total_assignments', label: 'Asignaciones' },
+            { k: 'held_count', label: 'Held' },
+            { k: 'reserved_count', label: 'Reserved' },
+            { k: 'released_count', label: 'Released' },
+            { k: 'cancelled_count', label: 'Cancelled' },
+            { k: 'event_related_rooms_count', label: 'Habitaciones activas' },
+            { k: 'estimated_lodging_revenue', label: 'Ingreso est. (MXN)', fmtMoney: true },
+          ].map(({ k, label, fmtMoney }) => (
+            <div key={k} className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-3">
+              <p className="text-lg font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                {fmtMoney ? fmt(lodgingSummary[k]) : (lodgingSummary[k] ?? 0)}
+              </p>
+              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-1">{label}</p>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* ── Revenue Opportunity (full-width highlight) ───────── */}
@@ -250,7 +406,7 @@ export default function CorporateDashboard() {
           <h3 className="font-semibold text-slate-800" style={{ fontFamily: 'Manrope, sans-serif' }}>
             Comparativo de Ingresos
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5 mb-5">Hotel vs Jardines — últimos meses</p>
+          <p className="text-xs text-slate-400 mt-0.5 mb-5">Ingresos por mes — series del grupo</p>
           {chart.length > 0 ? (
             <ResponsiveContainer width="100%" height={210}>
               <BarChart data={chart} margin={{ top: 0, right: 5, left: -10, bottom: 0 }}>
@@ -264,8 +420,8 @@ export default function CorporateDashboard() {
                   formatter={(v) => [`${fmt(v)} MXN`]}
                   cursor={{ fill: '#f8fafc' }} />
                 <Legend wrapperStyle={{ fontSize: '11px', paddingTop: 12 }} />
-                <Bar dataKey="hotel"   name="Hotel Boutique"     fill="#10b981" radius={[3,3,0,0]} />
-                <Bar dataKey="eventos" name="Jardín de Amargati" fill="#8b5cf6" radius={[3,3,0,0]} />
+                <Bar dataKey="hotel"   name={chartLabels.hotel || 'Hotel'}     fill="#10b981" radius={[3,3,0,0]} />
+                <Bar dataKey="eventos" name={chartLabels.eventos || 'Eventos'} fill="#8b5cf6" radius={[3,3,0,0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -334,9 +490,9 @@ export default function CorporateDashboard() {
               Performance Score
             </p>
             <div className="flex items-center justify-around">
-              <ScoreRing score={hotel.performance_score ?? 0}  label={hotel.property_name?.split(' ')[0] || 'Hotel'} />
+              <ScoreRing score={hotel.performance_score ?? 0}  label={hotel.property_name?.split(' ').slice(0, 2).join(' ') || 'Hotel'} />
               <div className="w-px h-16 bg-slate-200" />
-              <ScoreRing score={garden.performance_score ?? 0} label="Jardines" />
+              <ScoreRing score={garden.performance_score ?? 0} label={garden.property_name?.split(' ').slice(0, 2).join(' ') || 'Jardín'} />
             </div>
           </div>
         </div>

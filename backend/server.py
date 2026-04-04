@@ -8,7 +8,11 @@ import resend
 
 from auth import (
     get_current_user,
+    require_any_module,
+    require_module,
     require_role,
+    allowed_property_ids_for_reports,
+    assigned_property_ids_for_user,
     _allowed_property_ids,
     _ensure_guest_in_scope,
     _ensure_reservation_in_scope,
@@ -83,8 +87,9 @@ from models import (
     UserResponse,
     UserUpdate,
 )
-from routers import messages_router, tasks_router, users_router, auth_router, rooms_router, guests_router
+from routers import messages_router, tasks_router, users_router, auth_router, rooms_router, guests_router, event_lodging_router
 from seeds import COLORS, DEMO_PROPERTY_ID, run_all
+from services.reports_scope import reservation_property_match, room_property_match
 from services.scoring import calculate_garden_score, calculate_hotel_score
 
 # Email security: API key must come ONLY from environment variable — never hardcoded
@@ -101,7 +106,7 @@ api_router = APIRouter(prefix="/api")
 
 # --- RESERVATIONS ---
 @api_router.get("/reservations")
-async def get_reservations(current_user: UserModel = Depends(get_current_user)):
+async def get_reservations(current_user: UserModel = Depends(require_module("reservations"))):
     allowed = await _allowed_property_ids(current_user)
     if allowed is None:
         q = {}
@@ -112,11 +117,14 @@ async def get_reservations(current_user: UserModel = Depends(get_current_user)):
     return await db.reservations.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
 
 @api_router.post("/reservations")
-async def create_reservation(data: ReservationCreate, current_user: UserModel = Depends(get_current_user)):
+async def create_reservation(
+    data: ReservationCreate, current_user: UserModel = Depends(require_module("reservations"))
+):
     guest = await db.guests.find_one({"id": data.guest_id})
     room = await db.rooms.find_one({"id": data.room_id})
     if not guest: raise HTTPException(status_code=404, detail="Huésped no encontrado")
     if not room: raise HTTPException(status_code=404, detail="Habitación no encontrada")
+    await _ensure_hotel_room_inventory_for_booking(room)
     await _ensure_room_in_scope(room, current_user)
     await _ensure_guest_in_scope(data.guest_id, current_user)
     from datetime import date as dt_date
@@ -139,7 +147,11 @@ async def create_reservation(data: ReservationCreate, current_user: UserModel = 
     return reservation.model_dump()
 
 @api_router.patch("/reservations/{res_id}/checkin")
-async def checkin(res_id: str, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def checkin(
+    res_id: str,
+    _: UserModel = Depends(require_module("reservations")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
     await _ensure_reservation_in_scope(res, current_user)
@@ -148,7 +160,11 @@ async def checkin(res_id: str, current_user: UserModel = Depends(require_role("a
     res["status"] = "checked_in"; res.pop("_id", None); return res
 
 @api_router.patch("/reservations/{res_id}/checkout")
-async def checkout(res_id: str, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def checkout(
+    res_id: str,
+    _: UserModel = Depends(require_module("reservations")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
     await _ensure_reservation_in_scope(res, current_user)
@@ -157,7 +173,9 @@ async def checkout(res_id: str, current_user: UserModel = Depends(require_role("
     res["status"] = "checked_out"; res.pop("_id", None); return res
 
 @api_router.patch("/reservations/{res_id}/cancel")
-async def cancel_reservation(res_id: str, current_user: UserModel = Depends(get_current_user)):
+async def cancel_reservation(
+    res_id: str, current_user: UserModel = Depends(require_module("reservations"))
+):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
     await _ensure_reservation_in_scope(res, current_user)
@@ -166,7 +184,11 @@ async def cancel_reservation(res_id: str, current_user: UserModel = Depends(get_
     res["status"] = "cancelled"; res.pop("_id", None); return res
 
 @api_router.patch("/reservations/{res_id}/collect-payment")
-async def collect_payment(res_id: str, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def collect_payment(
+    res_id: str,
+    _: UserModel = Depends(require_module("reservations")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
     await _ensure_reservation_in_scope(res, current_user)
@@ -174,122 +196,289 @@ async def collect_payment(res_id: str, current_user: UserModel = Depends(require
     res["payment_status"] = "paid"; res.pop("_id", None); return res
 
 # --- REPORTS ---
-@api_router.get("/reports/dashboard")
-async def dashboard_stats(current_user: UserModel = Depends(get_current_user)):
-    total_rooms = await db.rooms.count_documents({})
-    occupied = await db.rooms.count_documents({"status": "occupied"})
-    available = await db.rooms.count_documents({"status": "available"})
-    cleaning = await db.rooms.count_documents({"status": "cleaning"})
-    maintenance = await db.rooms.count_documents({"status": "maintenance"})
-    reserved = await db.rooms.count_documents({"status": "reserved"})
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    today_in = await db.reservations.count_documents({"check_in_date": today, "status": {"$in": ["confirmed", "checked_in"]}})
-    today_out = await db.reservations.count_documents({"check_out_date": today, "status": "checked_in"})
-    active_guests = await db.reservations.count_documents({"status": "checked_in"})
-    pending_tasks = await db.tasks.count_documents({"status": "pending"})
-    total_guests = await db.guests.count_documents({})
-    pending_payments = await db.reservations.count_documents({
-        "payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}})
-    pipeline = [{"$match": {"status": {"$in": ["checked_out", "checked_in"]}}},
-                {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}}]
-    rev = await db.reservations.aggregate(pipeline).to_list(1)
+def _reports_dashboard_empty_payload():
     return {
-        "total_rooms": total_rooms, "occupied_rooms": occupied, "available_rooms": available,
-        "cleaning_rooms": cleaning, "maintenance_rooms": maintenance, "reserved_rooms": reserved,
-        "occupancy_rate": round((occupied / total_rooms * 100) if total_rooms > 0 else 0, 1),
-        "today_checkins": today_in, "today_checkouts": today_out, "active_guests": active_guests,
-        "pending_tasks": pending_tasks, "total_guests": total_guests,
-        "pending_payments": pending_payments,
-        "total_revenue": rev[0]["total"] if rev else 0
+        "total_rooms": 0,
+        "occupied_rooms": 0,
+        "available_rooms": 0,
+        "cleaning_rooms": 0,
+        "maintenance_rooms": 0,
+        "reserved_rooms": 0,
+        "occupancy_rate": 0.0,
+        "today_checkins": 0,
+        "today_checkouts": 0,
+        "active_guests": 0,
+        "pending_tasks": 0,
+        "total_guests": 0,
+        "pending_payments": 0,
+        "total_revenue": 0,
     }
 
+
+def _reports_insights_empty_payload():
+    return {
+        "month_revenue": 0,
+        "month_reservations": 0,
+        "occupancy_rate": 0.0,
+        "projected_month_revenue": 0,
+        "pending_payments_count": 0,
+        "pending_payments_amount": 0,
+        "most_booked_type": None,
+        "estimated_lost_revenue": 0,
+        "source_breakdown": [],
+    }
+
+
+@api_router.get("/reports/dashboard")
+async def dashboard_stats(current_user: UserModel = Depends(require_module("reports"))):
+    """Room and reservation metrics scoped via allowed_property_ids_for_reports (manager/finance = assigned property only)."""
+    allowed = await allowed_property_ids_for_reports(current_user)
+    if allowed is None:
+        pq: dict = {}
+        rq: dict = {}
+    elif not allowed:
+        return _reports_dashboard_empty_payload()
+    else:
+        pq = room_property_match(allowed)
+        rq = reservation_property_match(allowed)
+
+    total_rooms = await db.rooms.count_documents(pq)
+    occupied = await db.rooms.count_documents({**pq, "status": "occupied"})
+    available = await db.rooms.count_documents({**pq, "status": "available"})
+    cleaning = await db.rooms.count_documents({**pq, "status": "cleaning"})
+    maintenance = await db.rooms.count_documents({**pq, "status": "maintenance"})
+    reserved = await db.rooms.count_documents({**pq, "status": "reserved"})
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_in = await db.reservations.count_documents(
+        {**rq, "check_in_date": today, "status": {"$in": ["confirmed", "checked_in"]}}
+    )
+    today_out = await db.reservations.count_documents(
+        {**rq, "check_out_date": today, "status": "checked_in"}
+    )
+    active_guests = await db.reservations.count_documents({**rq, "status": "checked_in"})
+    pending_payments = await db.reservations.count_documents(
+        {**rq, "payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}}
+    )
+    pipeline = [
+        {"$match": {**rq, "status": {"$in": ["checked_out", "checked_in"]}}},
+        {"$group": {"_id": None, "total": {"$sum": "$total_amount"}}},
+    ]
+    rev = await db.reservations.aggregate(pipeline).to_list(1)
+
+    if allowed is None:
+        pending_tasks = await db.tasks.count_documents({"status": "pending"})
+        total_guests = await db.guests.count_documents({})
+    else:
+        room_ids = [r["id"] for r in await db.rooms.find(pq, {"id": 1}).to_list(5000)]
+        if room_ids:
+            pending_tasks = await db.tasks.count_documents(
+                {"status": "pending", "room_id": {"$in": room_ids}}
+            )
+        else:
+            pending_tasks = 0
+        guest_ids = await db.reservations.distinct("guest_id", rq)
+        total_guests = len(guest_ids)
+
+    return {
+        "total_rooms": total_rooms,
+        "occupied_rooms": occupied,
+        "available_rooms": available,
+        "cleaning_rooms": cleaning,
+        "maintenance_rooms": maintenance,
+        "reserved_rooms": reserved,
+        "occupancy_rate": round((occupied / total_rooms * 100) if total_rooms > 0 else 0, 1),
+        "today_checkins": today_in,
+        "today_checkouts": today_out,
+        "active_guests": active_guests,
+        "pending_tasks": pending_tasks,
+        "total_guests": total_guests,
+        "pending_payments": pending_payments,
+        "total_revenue": rev[0]["total"] if rev else 0,
+    }
+
+
 @api_router.get("/reports/occupancy")
-async def occupancy_report(current_user: UserModel = Depends(get_current_user)):
-    monthly = await db.reservations.aggregate([
-        {"$match": {"status": {"$in": ["checked_in", "checked_out"]}}},
-        {"$group": {"_id": {"$substr": ["$check_in_date", 0, 7]}, "count": {"$sum": 1}, "revenue": {"$sum": "$total_amount"}}},
-        {"$sort": {"_id": 1}}, {"$limit": 12}]).to_list(12)
-    room_types = await db.rooms.aggregate([{"$group": {"_id": "$type", "count": {"$sum": 1}}}]).to_list(10)
-    room_statuses = await db.rooms.aggregate([{"$group": {"_id": "$status", "count": {"$sum": 1}}}]).to_list(10)
+async def occupancy_report(current_user: UserModel = Depends(require_module("reports"))):
+    allowed = await allowed_property_ids_for_reports(current_user)
+    if allowed is not None and not allowed:
+        return {"monthly": [], "room_types": [], "room_statuses": []}
+    rf = reservation_property_match(allowed)
+    roomf = room_property_match(allowed)
+    monthly = await db.reservations.aggregate(
+        [
+            {"$match": {**rf, "status": {"$in": ["checked_in", "checked_out"]}}},
+            {
+                "$group": {
+                    "_id": {"$substr": ["$check_in_date", 0, 7]},
+                    "count": {"$sum": 1},
+                    "revenue": {"$sum": "$total_amount"},
+                }
+            },
+            {"$sort": {"_id": 1}},
+            {"$limit": 12},
+        ]
+    ).to_list(12)
+    room_type_pipe: List[dict] = []
+    if roomf:
+        room_type_pipe.append({"$match": roomf})
+    room_type_pipe.append({"$group": {"_id": "$type", "count": {"$sum": 1}}})
+    room_types = await db.rooms.aggregate(room_type_pipe).to_list(10)
+    room_status_pipe: List[dict] = []
+    if roomf:
+        room_status_pipe.append({"$match": roomf})
+    room_status_pipe.append({"$group": {"_id": "$status", "count": {"$sum": 1}}})
+    room_statuses = await db.rooms.aggregate(room_status_pipe).to_list(10)
     return {
         "monthly": [{"month": r["_id"], "reservaciones": r["count"], "ingresos": r["revenue"]} for r in monthly],
         "room_types": [{"type": r["_id"], "count": r["count"]} for r in room_types],
-        "room_statuses": [{"status": r["_id"], "count": r["count"]} for r in room_statuses]
+        "room_statuses": [{"status": r["_id"], "count": r["count"]} for r in room_statuses],
     }
 
+
 @api_router.get("/reports/insights")
-async def revenue_insights(current_user: UserModel = Depends(get_current_user)):
+async def revenue_insights(current_user: UserModel = Depends(require_module("reports"))):
     from datetime import date as dt_date
+
+    allowed = await allowed_property_ids_for_reports(current_user)
+    if allowed is not None and not allowed:
+        return _reports_insights_empty_payload()
+    rf = reservation_property_match(allowed)
+    roomf = room_property_match(allowed)
+
     today = dt_date.today()
     month_start = today.replace(day=1).isoformat()
-    month_end = today.replace(day=1, month=today.month % 12 + 1 if today.month < 12 else 1,
-                               year=today.year if today.month < 12 else today.year + 1).isoformat()
-    # Revenue this month
+    month_end = today.replace(
+        day=1,
+        month=today.month % 12 + 1 if today.month < 12 else 1,
+        year=today.year if today.month < 12 else today.year + 1,
+    ).isoformat()
     month_res = await db.reservations.find(
-        {"check_in_date": {"$gte": month_start, "$lt": month_end}, "status": {"$nin": ["cancelled"]}}, {"_id": 0}
+        {
+            **rf,
+            "check_in_date": {"$gte": month_start, "$lt": month_end},
+            "status": {"$nin": ["cancelled"]},
+        },
+        {"_id": 0},
     ).to_list(1000)
     month_revenue = sum(r.get("total_amount", 0) for r in month_res)
-    # Occupancy rate
-    total_rooms = await db.rooms.count_documents({})
-    occupied = await db.rooms.count_documents({"status": {"$in": ["occupied", "reserved"]}})
+    total_rooms = await db.rooms.count_documents(roomf)
+    occupied = await db.rooms.count_documents({**roomf, "status": {"$in": ["occupied", "reserved"]}})
     occ_rate = round((occupied / total_rooms * 100) if total_rooms > 0 else 0, 1)
-    # Pending payments
-    pending_pay = await db.reservations.count_documents({"payment_status": "pending", "status": {"$in": ["confirmed","checked_in"]}})
+    pending_pay = await db.reservations.count_documents(
+        {**rf, "payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}}
+    )
     pending_pay_amount = 0
     if pending_pay > 0:
-        pp_res = await db.reservations.find({"payment_status": "pending", "status": {"$in": ["confirmed","checked_in"]}}, {"_id": 0, "total_amount": 1}).to_list(1000)
+        pp_res = await db.reservations.find(
+            {**rf, "payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}},
+            {"_id": 0, "total_amount": 1},
+        ).to_list(1000)
         pending_pay_amount = sum(r.get("total_amount", 0) for r in pp_res)
-    # Most booked room type
-    type_pipeline = [{"$match": {"status": {"$nin": ["cancelled"]}}},
-                     {"$lookup": {"from": "rooms", "localField": "room_id", "foreignField": "id", "as": "room"}},
-                     {"$unwind": {"path": "$room", "preserveNullAndEmptyArrays": True}},
-                     {"$group": {"_id": "$room.type", "count": {"$sum": 1}}},
-                     {"$sort": {"count": -1}}, {"$limit": 1}]
+    type_pipeline = [
+        {"$match": {**rf, "status": {"$nin": ["cancelled"]}}},
+        {"$lookup": {"from": "rooms", "localField": "room_id", "foreignField": "id", "as": "room"}},
+        {"$unwind": {"path": "$room", "preserveNullAndEmptyArrays": True}},
+        {"$group": {"_id": "$room.type", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 1},
+    ]
     top_type = await db.reservations.aggregate(type_pipeline).to_list(1)
-    # Projected end of month (linear projection)
     days_elapsed = today.day
     days_in_month = 30
     projected = round((month_revenue / days_elapsed * days_in_month) if days_elapsed > 0 else 0)
-    # Lost revenue (empty rooms * avg price per night)
     avg_price = 1500.0
     empty_rooms = total_rooms - occupied
     lost_revenue_estimate = empty_rooms * avg_price
-    # Source breakdown
-    source_pipeline = [{"$match": {"status": {"$nin": ["cancelled"]}}},
-                       {"$group": {"_id": "$reservation_source", "count": {"$sum": 1}, "revenue": {"$sum": "$total_amount"}}}]
+    source_pipeline = [
+        {"$match": {**rf, "status": {"$nin": ["cancelled"]}}},
+        {"$group": {"_id": "$reservation_source", "count": {"$sum": 1}, "revenue": {"$sum": "$total_amount"}}},
+    ]
     sources = await db.reservations.aggregate(source_pipeline).to_list(10)
     source_labels = {"web": "Portal Web", "reception": "Recepción", "whatsapp": "WhatsApp", "other": "Otro"}
     return {
-        "month_revenue": month_revenue, "month_reservations": len(month_res),
-        "occupancy_rate": occ_rate, "projected_month_revenue": projected,
-        "pending_payments_count": pending_pay, "pending_payments_amount": pending_pay_amount,
+        "month_revenue": month_revenue,
+        "month_reservations": len(month_res),
+        "occupancy_rate": occ_rate,
+        "projected_month_revenue": projected,
+        "pending_payments_count": pending_pay,
+        "pending_payments_amount": pending_pay_amount,
         "most_booked_type": top_type[0]["_id"] if top_type else None,
         "estimated_lost_revenue": lost_revenue_estimate,
-        "source_breakdown": [{"source": s["_id"] or "other", "label": source_labels.get(s["_id"] or "other", "Otro"), "count": s["count"], "revenue": s["revenue"]} for s in sources],
+        "source_breakdown": [
+            {
+                "source": s["_id"] or "other",
+                "label": source_labels.get(s["_id"] or "other", "Otro"),
+                "count": s["count"],
+                "revenue": s["revenue"],
+            }
+            for s in sources
+        ],
     }
 
+
 @api_router.get("/reports/export/csv")
-async def export_reservations_csv(current_user: UserModel = Depends(require_role("admin", "owner", "manager", "receptionist"))):
+async def export_reservations_csv(
+    _: UserModel = Depends(require_module("reports")),
+    current_user: UserModel = Depends(require_role("admin", "owner", "manager", "receptionist")),
+):
+    """Finance role excluded (require_role). Rows filtered to report property scope when not platform_admin."""
     from fastapi.responses import StreamingResponse
     import io, csv
-    reservations = await db.reservations.find({}, {"_id": 0}).sort("created_at", -1).to_list(10000)
+
+    allowed = await allowed_property_ids_for_reports(current_user)
+    if allowed is not None and not allowed:
+        reservations = []
+    else:
+        scope = {} if allowed is None else {"property_id": {"$in": allowed}}
+        reservations = await db.reservations.find(scope, {"_id": 0}).sort("created_at", -1).to_list(10000)
     output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=["id","guest_name","room_number","check_in_date","check_out_date","total_amount","status","payment_status","reservation_source","event_name","created_at"], extrasaction="ignore")
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "id",
+            "guest_name",
+            "room_number",
+            "check_in_date",
+            "check_out_date",
+            "total_amount",
+            "status",
+            "payment_status",
+            "reservation_source",
+            "event_name",
+            "created_at",
+        ],
+        extrasaction="ignore",
+    )
     writer.writeheader()
     for r in reservations:
         writer.writerow({k: r.get(k, "") for k in writer.fieldnames})
     output.seek(0)
-    return StreamingResponse(iter([output.getvalue()]), media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=reservas_alma.csv"})
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=reservas_alma.csv"},
+    )
+
+
 @api_router.get("/reports/revenue-breakdown")
-async def revenue_breakdown(current_user: UserModel = Depends(get_current_user)):
+async def revenue_breakdown(current_user: UserModel = Depends(require_module("reports"))):
+    allowed = await allowed_property_ids_for_reports(current_user)
+    if allowed is not None and not allowed:
+        return {
+            "hotel_revenue": 0,
+            "event_revenue": 0,
+            "total_revenue": 0,
+            "events_breakdown": [],
+            "hotel_reservations": 0,
+            "event_reservations": 0,
+        }
+    rf = reservation_property_match(allowed)
     all_res = await db.reservations.find(
-        {"status": {"$nin": ["cancelled"]}}, {"_id": 0, "total_amount": 1, "event_name": 1}
+        {**rf, "status": {"$nin": ["cancelled"]}}, {"_id": 0, "total_amount": 1, "event_name": 1}
     ).to_list(10000)
     hotel_revenue = sum(r["total_amount"] for r in all_res if not r.get("event_name"))
     event_revenue = sum(r["total_amount"] for r in all_res if r.get("event_name"))
     total_revenue = hotel_revenue + event_revenue
-    # Group by event name
     events_map: Dict[str, Dict] = {}
     for r in all_res:
         name = r.get("event_name")
@@ -348,24 +537,42 @@ async def task_suggestion(data: dict, current_user: UserModel = Depends(get_curr
 
 @api_router.get("/properties")
 async def list_properties(current_user: UserModel = Depends(get_current_user)):
+    """Lista propiedades visibles según alcance del usuario (tenant / asignadas). No exige módulo 'properties'."""
     props = await db.properties.find({}, {"_id": 0}).to_list(100)
-    return props
+    allowed = await _allowed_property_ids(current_user)
+    if allowed is None:
+        return props
+    idset = set(allowed)
+    return [p for p in props if p.get("id") in idset]
 
 @api_router.post("/properties")
-async def create_property(data: PropertyCreate, current_user: UserModel = Depends(require_role("admin", "platform_admin"))):
+async def create_property(
+    data: PropertyCreate,
+    _: UserModel = Depends(require_module("properties")),
+    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+):
     prop = PropertyModel(**data.model_dump())
     await db.properties.insert_one(prop.model_dump())
     return prop.model_dump()
 
 @api_router.patch("/properties/{prop_id}")
-async def update_property(prop_id: str, data: dict, current_user: UserModel = Depends(require_role("admin", "platform_admin"))):
+async def update_property(
+    prop_id: str,
+    data: dict,
+    _: UserModel = Depends(require_module("properties")),
+    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+):
     await db.properties.update_one({"id": prop_id}, {"$set": data})
     p = await db.properties.find_one({"id": prop_id}, {"_id": 0})
     if not p: raise HTTPException(status_code=404, detail="Propiedad no encontrada")
     return p
 
 @api_router.delete("/properties/{prop_id}")
-async def delete_property(prop_id: str, current_user: UserModel = Depends(require_role("admin", "platform_admin"))):
+async def delete_property(
+    prop_id: str,
+    _: UserModel = Depends(require_module("properties")),
+    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+):
     active = await db.reservations.count_documents({"property_id": prop_id, "status": {"$in": ["confirmed", "checked_in"]}})
     if active > 0:
         raise HTTPException(status_code=400, detail="No se puede eliminar: la propiedad tiene reservas activas")
@@ -375,65 +582,103 @@ async def delete_property(prop_id: str, current_user: UserModel = Depends(requir
 # ====================== EVENT SPACES ======================
 
 @api_router.get("/event-spaces")
-async def list_event_spaces(property_id: Optional[str] = None, current_user: UserModel = Depends(get_current_user)):
+async def list_event_spaces(
+    property_id: Optional[str] = None,
+    current_user: UserModel = Depends(require_module("jardines")),
+):
     q = {"property_id": property_id} if property_id else {}
     spaces = await db.event_spaces.find(q, {"_id": 0}).to_list(100)
     return spaces
 
 @api_router.post("/event-spaces")
-async def create_event_space(data: EventSpaceCreate, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def create_event_space(
+    data: EventSpaceCreate,
+    _: UserModel = Depends(require_module("jardines")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     space = EventSpaceModel(**data.model_dump())
     await db.event_spaces.insert_one(space.model_dump())
     return space.model_dump()
 
 @api_router.patch("/event-spaces/{space_id}")
-async def update_event_space(space_id: str, data: dict, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def update_event_space(
+    space_id: str,
+    data: dict,
+    _: UserModel = Depends(require_module("jardines")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     await db.event_spaces.update_one({"id": space_id}, {"$set": data})
     s = await db.event_spaces.find_one({"id": space_id}, {"_id": 0})
     if not s: raise HTTPException(status_code=404, detail="Espacio no encontrado")
     return s
 
 @api_router.delete("/event-spaces/{space_id}")
-async def delete_event_space(space_id: str, current_user: UserModel = Depends(require_role("admin"))):
+async def delete_event_space(
+    space_id: str,
+    _: UserModel = Depends(require_module("jardines")),
+    current_user: UserModel = Depends(require_role("admin")),
+):
     await db.event_spaces.delete_one({"id": space_id})
     return {"deleted": True}
 
 # ====================== HOTEL SPACES ======================
 
 @api_router.get("/hotel-spaces")
-async def list_hotel_spaces(property_id: Optional[str] = None, current_user: UserModel = Depends(get_current_user)):
+async def list_hotel_spaces(
+    property_id: Optional[str] = None,
+    current_user: UserModel = Depends(require_module("hotel-events")),
+):
     q = {"property_id": property_id} if property_id else {}
     spaces = await db.hotel_spaces.find(q, {"_id": 0}).to_list(100)
     return spaces
 
 @api_router.post("/hotel-spaces")
-async def create_hotel_space(data: HotelSpaceCreate, current_user: UserModel = Depends(require_role("admin", "manager"))):
+async def create_hotel_space(
+    data: HotelSpaceCreate,
+    _: UserModel = Depends(require_module("hotel-events")),
+    current_user: UserModel = Depends(require_role("admin", "manager")),
+):
     space = HotelSpaceModel(**data.model_dump())
     await db.hotel_spaces.insert_one(space.model_dump())
     return space.model_dump()
 
 @api_router.patch("/hotel-spaces/{space_id}")
-async def update_hotel_space(space_id: str, data: dict, current_user: UserModel = Depends(require_role("admin", "manager"))):
+async def update_hotel_space(
+    space_id: str,
+    data: dict,
+    _: UserModel = Depends(require_module("hotel-events")),
+    current_user: UserModel = Depends(require_role("admin", "manager")),
+):
     await db.hotel_spaces.update_one({"id": space_id}, {"$set": data})
     s = await db.hotel_spaces.find_one({"id": space_id}, {"_id": 0})
     if not s: raise HTTPException(status_code=404, detail="Espacio no encontrado")
     return s
 
 @api_router.delete("/hotel-spaces/{space_id}")
-async def delete_hotel_space(space_id: str, current_user: UserModel = Depends(require_role("admin", "manager"))):
+async def delete_hotel_space(
+    space_id: str,
+    _: UserModel = Depends(require_module("hotel-events")),
+    current_user: UserModel = Depends(require_role("admin", "manager")),
+):
     await db.hotel_spaces.delete_one({"id": space_id})
     return {"deleted": True}
 
 # ====================== EVENT BOOKINGS ======================
 
 @api_router.get("/event-bookings")
-async def list_event_bookings(property_id: Optional[str] = None, current_user: UserModel = Depends(get_current_user)):
+async def list_event_bookings(
+    property_id: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("jardines", "hotel-events")),
+):
     q = {"property_id": property_id} if property_id else {}
     bookings = await db.event_bookings.find(q, {"_id": 0}).sort("event_date", -1).to_list(500)
     return bookings
 
 @api_router.post("/event-bookings")
-async def create_event_booking(data: EventBookingCreate, current_user: UserModel = Depends(get_current_user)):
+async def create_event_booking(
+    data: EventBookingCreate,
+    current_user: UserModel = Depends(require_any_module("jardines", "hotel-events")),
+):
     space = await db.event_spaces.find_one({"id": data.event_space_id}, {"_id": 0})
     space_name = space["space_name"] if space else "Espacio"
     booking = EventBookingModel(**data.model_dump(), event_space_name=space_name, created_by=current_user.id)
@@ -441,7 +686,11 @@ async def create_event_booking(data: EventBookingCreate, current_user: UserModel
     return booking.model_dump()
 
 @api_router.patch("/event-bookings/{booking_id}/status")
-async def update_event_booking_status(booking_id: str, data: dict, current_user: UserModel = Depends(get_current_user)):
+async def update_event_booking_status(
+    booking_id: str,
+    data: dict,
+    current_user: UserModel = Depends(require_any_module("jardines", "hotel-events")),
+):
     allowed = {"booking_status", "payment_status", "notes"}
     update = {k: v for k, v in data.items() if k in allowed}
     await db.event_bookings.update_one({"id": booking_id}, {"$set": update})
@@ -450,14 +699,41 @@ async def update_event_booking_status(booking_id: str, data: dict, current_user:
     return b
 
 @api_router.delete("/event-bookings/{booking_id}")
-async def delete_event_booking(booking_id: str, current_user: UserModel = Depends(require_role("admin", "receptionist"))):
+async def delete_event_booking(
+    booking_id: str,
+    _: UserModel = Depends(require_any_module("jardines", "hotel-events")),
+    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+):
     await db.event_bookings.delete_one({"id": booking_id})
     return {"deleted": True}
+
+
+async def _corporate_scope_property_ids(current_user: UserModel) -> list[str]:
+    """IDs de propiedades del mismo tenant que el usuario (hotel + jardines), para métricas de grupo coherentes."""
+    if current_user.tenant_id:
+        props = await db.properties.find({"tenant_id": current_user.tenant_id}, {"id": 1}).to_list(100)
+        if props:
+            return [p["id"] for p in props]
+    assigned = assigned_property_ids_for_user(current_user)
+    anchor = assigned[0] if assigned else None
+    if anchor:
+        p = await db.properties.find_one({"id": anchor}, {"_id": 0, "tenant_id": 1})
+        if p and p.get("tenant_id"):
+            props = await db.properties.find({"tenant_id": p["tenant_id"]}, {"id": 1}).to_list(100)
+            if props:
+                return [x["id"] for x in props]
+        return [anchor]
+    props = await db.properties.find({}, {"id": 1}).to_list(200)
+    return [p["id"] for p in props]
+
 
 # ====================== CORPORATE DASHBOARD ======================
 
 @api_router.get("/corporate/dashboard")
-async def corporate_dashboard(current_user: UserModel = Depends(require_role("admin", "owner"))):
+async def corporate_dashboard(
+    _: UserModel = Depends(require_module("corporate")),
+    current_user: UserModel = Depends(require_role("admin", "owner")),
+):
     from datetime import date as dt_date, timedelta
     today = dt_date.today()
     today_str = today.isoformat()
@@ -477,52 +753,75 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
     last_month_start = last_day_last_month.replace(day=1).isoformat()
     last_month_end = first_day_this_month.isoformat()
 
-    properties = await db.properties.find({}, {"_id": 0}).to_list(100)
+    scope_ids = await _corporate_scope_property_ids(current_user)
+    scope_set = set(scope_ids)
+    all_properties = await db.properties.find({}, {"_id": 0}).to_list(100)
+    properties = [p for p in all_properties if p["id"] in scope_set]
 
-    # ====== HOTEL METRICS ======
-    hotel_res = await db.reservations.find({"status": {"$nin": ["cancelled"]}}, {"_id": 0}).to_list(10000)
+    hotel_prop_ids = [p["id"] for p in properties if p.get("type") == "hotel"]
+    garden_prop_ids = [p["id"] for p in properties if p.get("type") == "event_garden"]
+
+    pq = {"property_id": {"$in": hotel_prop_ids}} if hotel_prop_ids else {"property_id": {"$in": []}}
+    rq_hotel = {"status": {"$nin": ["cancelled"]}, "property_id": {"$in": hotel_prop_ids}} if hotel_prop_ids else {"property_id": {"$in": []}}
+    eq = {"booking_status": {"$ne": "cancelled"}, "property_id": {"$in": garden_prop_ids}} if garden_prop_ids else {"property_id": {"$in": []}}
+
+    # ====== HOTEL METRICS (solo propiedades tipo hotel; alineado con /properties/stats y vista Hoteles) ======
+    hotel_res = await db.reservations.find(rq_hotel, {"_id": 0}).to_list(10000)
     hotel_res_month = [r for r in hotel_res if r.get("check_in_date", "") >= month_start]
     hotel_revenue_month = sum(r.get("total_amount", 0) for r in hotel_res_month)
     hotel_revenue_total = sum(r.get("total_amount", 0) for r in hotel_res)
-    hotel_rooms_total = await db.rooms.count_documents({})
-    hotel_rooms_occupied = await db.rooms.count_documents({"status": {"$in": ["occupied", "reserved"]}})
-    hotel_rooms_available = await db.rooms.count_documents({"status": "available"})
+    hotel_rooms_total = await db.rooms.count_documents(pq)
+    hotel_rooms_occupied = await db.rooms.count_documents({**pq, "status": {"$in": ["occupied", "reserved"]}})
+    hotel_rooms_available = await db.rooms.count_documents({**pq, "status": "available"})
     hotel_occ_rate = round((hotel_rooms_occupied / hotel_rooms_total * 100) if hotel_rooms_total else 0, 1)
-    hotel_pending_pay = await db.reservations.count_documents({"payment_status": "pending", "status": {"$in": ["confirmed","checked_in"]}})
-    total_hotel_res = await db.reservations.count_documents({})
-    cancelled_hotel_res = await db.reservations.count_documents({"status": "cancelled"})
+    hotel_pending_pay = await db.reservations.count_documents({
+        "payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}, "property_id": {"$in": hotel_prop_ids},
+    }) if hotel_prop_ids else 0
+    total_hotel_res = await db.reservations.count_documents({"property_id": {"$in": hotel_prop_ids}}) if hotel_prop_ids else 0
+    cancelled_hotel_res = await db.reservations.count_documents({"status": "cancelled", "property_id": {"$in": hotel_prop_ids}}) if hotel_prop_ids else 0
     hotel_score = calculate_hotel_score(hotel_occ_rate, hotel_pending_pay, total_hotel_res, cancelled_hotel_res)
 
     # Expected hotel revenue (confirmed not yet checked in)
     expected_hotel_res = await db.reservations.find(
-        {"status": "confirmed"}, {"_id": 0, "total_amount": 1}).to_list(10000)
+        {"status": "confirmed", "property_id": {"$in": hotel_prop_ids}}, {"_id": 0, "total_amount": 1}
+    ).to_list(10000) if hotel_prop_ids else []
     expected_hotel_revenue = sum(r.get("total_amount", 0) for r in expected_hotel_res)
 
     # Last month hotel revenue
     hotel_last_month = await db.reservations.find(
-        {"check_in_date": {"$gte": last_month_start, "$lt": last_month_end}, "status": {"$nin": ["cancelled"]}},
-        {"_id": 0, "total_amount": 1}).to_list(1000)
+        {
+            "check_in_date": {"$gte": last_month_start, "$lt": last_month_end},
+            "status": {"$nin": ["cancelled"]},
+            "property_id": {"$in": hotel_prop_ids},
+        },
+        {"_id": 0, "total_amount": 1},
+    ).to_list(1000) if hotel_prop_ids else []
     hotel_last_month_revenue = sum(r.get("total_amount", 0) for r in hotel_last_month)
 
     # Revenue opportunity for hotel
-    rooms_prices = await db.rooms.find({}, {"_id": 0, "price_per_night": 1}).to_list(1000)
+    rooms_prices = await db.rooms.find(pq, {"_id": 0, "price_per_night": 1}).to_list(1000)
     avg_room_rate = (sum(r.get("price_per_night", 0) for r in rooms_prices) / len(rooms_prices)) if rooms_prices else 1500
     revenue_opportunity = round(hotel_rooms_available * avg_room_rate * remaining_days, 0)
 
-    # ====== EVENT GARDEN METRICS ======
-    event_bookings = await db.event_bookings.find({"booking_status": {"$ne": "cancelled"}}, {"_id": 0}).to_list(10000)
+    # ====== EVENT GARDEN METRICS (solo propiedades tipo event_garden; alineado con vista Jardines) ======
+    event_bookings = await db.event_bookings.find(eq, {"_id": 0}).to_list(10000)
     event_bookings_month = [b for b in event_bookings if b.get("event_date", "") >= month_start]
     event_revenue_month = sum(b.get("total_price", 0) for b in event_bookings_month)
     event_revenue_total = sum(b.get("total_price", 0) for b in event_bookings)
     event_pending_pay = sum(1 for b in event_bookings if b.get("payment_status") == "pending")
-    upcoming_events = [b for b in event_bookings if b.get("event_date", "") >= today_str]
-    expected_event_revenue = sum(b.get("total_price", 0) for b in upcoming_events)
-    garden_score = calculate_garden_score(len(upcoming_events), event_pending_pay, len(event_bookings))
+    upcoming_bookings_future = [b for b in event_bookings if b.get("event_date", "") >= today_str]
+    expected_event_revenue = sum(b.get("total_price", 0) for b in upcoming_bookings_future)
+    garden_score = calculate_garden_score(len(upcoming_bookings_future), event_pending_pay, len(event_bookings))
 
     # Last month event revenue
     event_last_month = await db.event_bookings.find(
-        {"event_date": {"$gte": last_month_start, "$lt": last_month_end}, "booking_status": {"$ne": "cancelled"}},
-        {"_id": 0, "total_price": 1}).to_list(1000)
+        {
+            "event_date": {"$gte": last_month_start, "$lt": last_month_end},
+            "booking_status": {"$ne": "cancelled"},
+            "property_id": {"$in": garden_prop_ids},
+        },
+        {"_id": 0, "total_price": 1},
+    ).to_list(1000) if garden_prop_ids else []
     event_last_month_revenue = sum(b.get("total_price", 0) for b in event_last_month)
 
     # ====== GROUP METRICS ======
@@ -533,11 +832,13 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
     today_arrivals = await db.reservations.count_documents({
         "check_in_date": today_str,
         "status": {"$in": ["confirmed", "checked_in"]},
-    })
+        "property_id": {"$in": hotel_prop_ids},
+    }) if hotel_prop_ids else 0
     today_departures = await db.reservations.count_documents({
         "check_out_date": today_str,
         "status": {"$in": ["confirmed", "checked_in"]},
-    })
+        "property_id": {"$in": hotel_prop_ids},
+    }) if hotel_prop_ids else 0
 
     revenue_growth_pct = 0.0
     if total_last_month_revenue > 0:
@@ -547,9 +848,9 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
 
     projected_month_revenue = round((total_month_revenue / today.day * days_in_month) if today.day > 0 else 0)
 
-    # Property ranking by monthly revenue — get actual names from DB
-    hotel_prop = await db.properties.find_one({"type": "hotel"}, {"_id": 0, "name": 1})
-    garden_prop = await db.properties.find_one({"type": "event_garden"}, {"_id": 0, "name": 1})
+    # Property ranking by monthly revenue — names from scoped properties list
+    hotel_prop = next((p for p in properties if p.get("type") == "hotel"), None)
+    garden_prop = next((p for p in properties if p.get("type") == "event_garden"), None)
     hotel_name = hotel_prop.get("name", "Hotel") if hotel_prop else "Hotel"
     garden_name = garden_prop.get("name", "Jardín") if garden_prop else "Jardín"
 
@@ -562,8 +863,8 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
 
     # Source breakdown
     sources = await db.reservations.aggregate([
-        {"$match": {"status": {"$nin": ["cancelled"]}}},
-        {"$group": {"_id": "$reservation_source", "count": {"$sum": 1}, "revenue": {"$sum": "$total_amount"}}}
+        {"$match": {"status": {"$nin": ["cancelled"]}, "property_id": {"$in": hotel_prop_ids}}},
+        {"$group": {"_id": "$reservation_source", "count": {"$sum": 1}, "revenue": {"$sum": "$total_amount"}}},
     ]).to_list(10)
     source_labels = {"web": "Portal Web", "reception": "Recepción", "whatsapp": "WhatsApp", "other": "Otro"}
     source_map = {s["_id"] or "other": s for s in sources}
@@ -580,13 +881,15 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
     # Monthly comparison chart (last 6 months)
     month_labels = {"01":"Ene","02":"Feb","03":"Mar","04":"Abr","05":"May","06":"Jun","07":"Jul","08":"Ago","09":"Sep","10":"Oct","11":"Nov","12":"Dic"}
     monthly_hotel = await db.reservations.aggregate([
-        {"$match": {"status": {"$nin": ["cancelled"]}}},
-        {"$group": {"_id": {"$substr": ["$check_in_date",0,7]}, "revenue":{"$sum":"$total_amount"},"count":{"$sum":1}}},
-        {"$sort": {"_id": -1}}, {"$limit": 6}]).to_list(6)
+        {"$match": {"status": {"$nin": ["cancelled"]}, "property_id": {"$in": hotel_prop_ids}}},
+        {"$group": {"_id": {"$substr": ["$check_in_date", 0, 7]}, "revenue": {"$sum": "$total_amount"}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": -1}}, {"$limit": 6},
+    ]).to_list(6)
     monthly_events = await db.event_bookings.aggregate([
-        {"$match": {"booking_status": {"$ne": "cancelled"}}},
-        {"$group": {"_id": {"$substr": ["$event_date",0,7]}, "revenue":{"$sum":"$total_price"},"count":{"$sum":1}}},
-        {"$sort": {"_id": -1}}, {"$limit": 6}]).to_list(6)
+        {"$match": {"booking_status": {"$ne": "cancelled"}, "property_id": {"$in": garden_prop_ids}}},
+        {"$group": {"_id": {"$substr": ["$event_date", 0, 7]}, "revenue": {"$sum": "$total_price"}, "count": {"$sum": 1}}},
+        {"$sort": {"_id": -1}}, {"$limit": 6},
+    ]).to_list(6)
     hotel_monthly_map = {m["_id"]: m for m in monthly_hotel}
     event_monthly_map = {m["_id"]: m for m in monthly_events}
     all_months = sorted(set(list(hotel_monthly_map.keys()) + list(event_monthly_map.keys())), reverse=True)[:6]
@@ -599,10 +902,146 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
             "eventos": event_monthly_map.get(month, {}).get("revenue", 0),
         })
 
+    # ----- Additive owner/business-control sections (do not remove keys above) -----
+    prop_by_id = {p["id"]: p.get("name", "Propiedad") for p in properties}
+
+    # Pending amounts (MXN): sum of line items with payment_status pending
+    hotel_pending_rows = await db.reservations.find(
+        {
+            "payment_status": "pending",
+            "status": {"$in": ["confirmed", "checked_in"]},
+            "property_id": {"$in": hotel_prop_ids},
+        },
+        {"_id": 0, "total_amount": 1},
+    ).to_list(10000)
+    hotel_pending_amount = float(sum(r.get("total_amount", 0) or 0 for r in hotel_pending_rows))
+
+    event_pending_amount = float(
+        sum(
+            b.get("total_price", 0) or 0
+            for b in event_bookings
+            if b.get("payment_status") == "pending" and b.get("booking_status") != "cancelled"
+        )
+    )
+    pending_breakdown = {
+        "total_pending_amount": round(hotel_pending_amount + event_pending_amount, 2),
+        "hotel_pending_amount": round(hotel_pending_amount, 2),
+        "event_pending_amount": round(event_pending_amount, 2),
+    }
+
+    # Upcoming events (next 15, not cancelled, on or after today)
+    upcoming_sorted = sorted(
+        [b for b in event_bookings if b.get("event_date", "") >= today_str],
+        key=lambda x: x.get("event_date", ""),
+    )[:15]
+    upcoming_events_list = []
+    for b in upcoming_sorted:
+        total_p = float(b.get("total_price", 0) or 0)
+        paid = total_p if b.get("payment_status") == "paid" else 0.0
+        pending_amt = round(total_p - paid, 2)
+        upcoming_events_list.append(
+            {
+                "id": b.get("id"),
+                "property_id": b.get("property_id"),
+                "event_name": (b.get("event_space_name") or "Evento").strip(),
+                "client_name": b.get("client_name") or "",
+                "event_date": b.get("event_date"),
+                "total_price": round(total_p, 2),
+                "paid_amount": round(paid, 2),
+                "pending_amount": pending_amt,
+                "property_name": prop_by_id.get(b.get("property_id"), "—"),
+            }
+        )
+
+    # Lodging linked to events (assignments scoped by room_property_id)
+    assign_q = {"room_property_id": {"$in": hotel_prop_ids}}
+    all_assign = await db.event_lodging_assignments.find(assign_q, {"_id": 0}).to_list(10000)
+    lodging_summary = {
+        "total_assignments": len(all_assign),
+        "held_count": sum(1 for a in all_assign if a.get("assignment_status") == "held"),
+        "reserved_count": sum(1 for a in all_assign if a.get("assignment_status") == "reserved"),
+        "released_count": sum(1 for a in all_assign if a.get("assignment_status") == "released"),
+        "cancelled_count": sum(1 for a in all_assign if a.get("assignment_status") == "cancelled"),
+        "event_related_rooms_count": sum(
+            1 for a in all_assign if a.get("assignment_status") in ("held", "reserved")
+        ),
+        "estimated_lodging_revenue": 0.0,
+        "no_assignments_in_scope": len(all_assign) == 0,
+    }
+    # Proxy estimate: sum(room.price_per_night * nights) for held/reserved; nights from check_in/out or 1
+    active_for_est = [
+        a
+        for a in all_assign
+        if a.get("assignment_status") in ("held", "reserved") and a.get("room_id")
+    ]
+    if active_for_est:
+        room_ids_u = list({a["room_id"] for a in active_for_est})
+        rooms_lodg = await db.rooms.find(
+            {"id": {"$in": room_ids_u}}, {"_id": 0, "id": 1, "price_per_night": 1}
+        ).to_list(len(room_ids_u))
+        rmap = {r["id"]: float(r.get("price_per_night", 0) or 0) for r in rooms_lodg}
+        est_rev = 0.0
+        for a in active_for_est:
+            pr = rmap.get(a.get("room_id"), 0.0)
+            ci = a.get("check_in_date")
+            co = a.get("check_out_date")
+            nights = 1
+            if ci and co:
+                try:
+                    d1 = dt_date.fromisoformat(str(ci)[:10])
+                    d2 = dt_date.fromisoformat(str(co)[:10])
+                    nights = max(1, (d2 - d1).days)
+                except ValueError:
+                    nights = 1
+            est_rev += pr * nights
+        lodging_summary["estimated_lodging_revenue"] = round(est_rev, 2)
+
+    # Simple deterministic alerts (max 12)
+    alerts = []
+    HIGH_PENDING_MXN = 50000.0
+    if pending_breakdown["total_pending_amount"] >= HIGH_PENDING_MXN:
+        alerts.append(
+            {
+                "type": "high_pending_balance",
+                "severity": "warning",
+                "message": f"Saldo pendiente de cobro elevado ({pending_breakdown['total_pending_amount']:,.0f} MXN). Revise cobros de hotel y eventos.",
+                "ref_id": None,
+            }
+        )
+    for b in sorted(
+        [x for x in event_bookings if x.get("booking_status") != "cancelled" and x.get("event_date", "") >= today_str],
+        key=lambda x: x.get("event_date", ""),
+    )[:20]:
+        if b.get("payment_status") == "pending":
+            alerts.append(
+                {
+                    "type": "upcoming_event_pending_payment",
+                    "severity": "warning",
+                    "message": f"Evento próximo con pago pendiente: {b.get('client_name', 'Cliente')} ({b.get('event_date', '')})",
+                    "ref_id": b.get("id"),
+                }
+            )
+        if not b.get("lodging_integration_enabled", False):
+            alerts.append(
+                {
+                    "type": "upcoming_event_no_lodging",
+                    "severity": "info",
+                    "message": f"Evento próximo sin integración de hospedaje: {b.get('client_name', 'Cliente')} ({b.get('event_date', '')})",
+                    "ref_id": b.get("id"),
+                }
+            )
+        if len(alerts) >= 12:
+            break
+
+    chart_labels = {
+        "hotel": hotel_name,
+        "eventos": garden_name,
+    }
+
     return {
         "properties": properties,
         "hotel": {
-            "property_name": "Alma Hotel Boutique",
+            "property_name": hotel_name,
             "property_type": "hotel",
             "revenue_this_month": hotel_revenue_month,
             "revenue_total": hotel_revenue_total,
@@ -616,14 +1055,14 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
             "expected_revenue": expected_hotel_revenue,
         },
         "event_gardens": {
-            "property_name": "Jardín de Amargati",
+            "property_name": garden_name,
             "property_type": "event_garden",
             "revenue_this_month": event_revenue_month,
             "revenue_total": event_revenue_total,
             "bookings_this_month": len(event_bookings_month),
             "bookings_total": len(event_bookings),
             "pending_payments": event_pending_pay,
-            "upcoming_events": len(upcoming_events),
+            "upcoming_events": len(upcoming_bookings_future),
             "performance_score": garden_score,
             "expected_revenue": expected_event_revenue,
         },
@@ -653,31 +1092,56 @@ async def corporate_dashboard(current_user: UserModel = Depends(require_role("ad
         },
         "property_ranking": property_ranking,
         "comparison_chart": comparison_chart,
+        "chart_labels": chart_labels,
+        "pending_breakdown": pending_breakdown,
+        "upcoming_events": upcoming_events_list,
+        "lodging_summary": lodging_summary,
+        "alerts": alerts[:12],
+        "scope": {"property_ids": scope_ids},
     }
 
 @api_router.get("/properties/stats")
-async def properties_stats(current_user: UserModel = Depends(require_role("admin", "owner"))):
-    """Per-property aggregated stats for HotelsOverview and EventGardensOverview."""
+async def properties_stats(
+    _: UserModel = Depends(require_any_module("hotels", "event-gardens", "corporate")),
+    current_user: UserModel = Depends(require_role("admin", "owner")),
+):
+    """Per-property aggregated stats for HotelsOverview and EventGardensOverview (mismo alcance que /corporate/dashboard)."""
     from datetime import date as dt_date
     today_str = dt_date.today().isoformat()
     month_start = dt_date.today().replace(day=1).isoformat()
+
+    scope_ids = await _corporate_scope_property_ids(current_user)
+    scope_set = set(scope_ids)
 
     properties = await db.properties.find({}, {"_id": 0}).to_list(100)
     result = []
 
     for prop in properties:
+        if prop["id"] not in scope_set:
+            continue
         if prop["type"] == "hotel":
-            total_rooms = await db.rooms.count_documents({})
-            occupied_rooms = await db.rooms.count_documents({"status": {"$in": ["occupied", "reserved"]}})
+            hpq = {"property_id": prop["id"]}
+            total_rooms = await db.rooms.count_documents(hpq)
+            occupied_rooms = await db.rooms.count_documents({**hpq, "status": {"$in": ["occupied", "reserved"]}})
             occupancy_rate = round((occupied_rooms / total_rooms * 100) if total_rooms > 0 else 0, 1)
             month_res = await db.reservations.find(
-                {"check_in_date": {"$gte": month_start}, "status": {"$nin": ["cancelled"]}},
-                {"_id": 0, "total_amount": 1}).to_list(1000)
+                {
+                    "check_in_date": {"$gte": month_start},
+                    "status": {"$nin": ["cancelled"]},
+                    "property_id": prop["id"],
+                },
+                {"_id": 0, "total_amount": 1},
+            ).to_list(1000)
             monthly_revenue = sum(r.get("total_amount", 0) for r in month_res)
             pending_payments = await db.reservations.count_documents(
-                {"payment_status": "pending", "status": {"$in": ["confirmed", "checked_in"]}})
-            total_res = await db.reservations.count_documents({})
-            cancelled_res = await db.reservations.count_documents({"status": "cancelled"})
+                {
+                    "payment_status": "pending",
+                    "status": {"$in": ["confirmed", "checked_in"]},
+                    "property_id": prop["id"],
+                }
+            )
+            total_res = await db.reservations.count_documents({"property_id": prop["id"]})
+            cancelled_res = await db.reservations.count_documents({"status": "cancelled", "property_id": prop["id"]})
             score = calculate_hotel_score(occupancy_rate, pending_payments, total_res, cancelled_res)
             result.append({
                 "id": prop["id"], "name": prop["name"], "type": "hotel", "status": prop["status"],
@@ -740,6 +1204,19 @@ async def find_available_room_of_type(room_type: str, check_in: str, check_out: 
         if overlapping == 0:
             return room
     return None
+
+
+async def _ensure_hotel_room_inventory_for_booking(room: dict) -> None:
+    """Valida propiedad hotel e inventario mínimo antes de crear reserva de habitación."""
+    pid = room.get("property_id")
+    if not pid:
+        raise HTTPException(status_code=400, detail="La habitación no tiene propiedad asignada.")
+    prop_doc = await db.properties.find_one({"id": pid}, {"_id": 0, "type": 1})
+    if not prop_doc or prop_doc.get("type") != "hotel":
+        raise HTTPException(status_code=400, detail="Solo se pueden reservar habitaciones en propiedades tipo hotel.")
+    if await db.rooms.count_documents({"property_id": pid}) < 1:
+        raise HTTPException(status_code=400, detail="No hay habitaciones registradas para esta propiedad.")
+
 
 async def send_booking_confirmation_email(booking_data: dict, booking_ref: str):
     if not RESEND_API_KEY:
@@ -865,6 +1342,7 @@ async def create_public_booking(data: PublicBookingCreate):
     room = await find_available_room_of_type(data.room_type, data.check_in_date, data.check_out_date)
     if not room:
         raise HTTPException(status_code=409, detail="No hay habitaciones disponibles para esas fechas")
+    await _ensure_hotel_room_inventory_for_booking(room)
     room_price = room["price_per_night"] * nights
     extras_total = calculate_extras_total(data.extras, data.adults, nights)
     total_amount = room_price + extras_total
@@ -938,6 +1416,7 @@ async def create_pending_booking(data: PublicBookingCreate):
     room = await find_available_room_of_type(data.room_type, data.check_in_date, data.check_out_date)
     if not room:
         raise HTTPException(status_code=409, detail="No hay habitaciones disponibles para esas fechas")
+    await _ensure_hotel_room_inventory_for_booking(room)
     room_price = room["price_per_night"] * nights
     extras_total = calculate_extras_total(data.extras, data.adults, nights)
     total_amount = room_price + extras_total
@@ -974,6 +1453,7 @@ async def get_checkout_status_public(session_id: str, request: Request):
         if pending:
             room = await find_available_room_of_type(pending["room_type"], pending["check_in_date"], pending["check_out_date"])
             if room:
+                await _ensure_hotel_room_inventory_for_booking(room)
                 system_user = await db.users.find_one({"role": "admin"}, {"_id": 0})
                 created_by = system_user["id"] if system_user else "public"
                 guest = await db.guests.find_one({"email": pending["email"]}, {"_id": 0})
@@ -1247,7 +1727,9 @@ async def onboard_property(data: dict, current_user: UserModel = Depends(require
 
 # --- Feature Toggles ---
 @api_router.get("/properties/{prop_id}/features")
-async def get_features(prop_id: str, current_user: UserModel = Depends(get_current_user)):
+async def get_features(
+    prop_id: str, current_user: UserModel = Depends(require_module("properties"))
+):
     prop = await db.properties.find_one({"id": prop_id}, {"_id": 0, "id": 1, "feature_toggles": 1})
     if prop is None: raise HTTPException(status_code=404, detail="Propiedad no encontrada")
     return prop.get("feature_toggles", {
@@ -1257,7 +1739,12 @@ async def get_features(prop_id: str, current_user: UserModel = Depends(get_curre
     })
 
 @api_router.patch("/properties/{prop_id}/features")
-async def update_features(prop_id: str, features: dict, current_user: UserModel = Depends(require_role("admin", "platform_admin"))):
+async def update_features(
+    prop_id: str,
+    features: dict,
+    _: UserModel = Depends(require_module("properties")),
+    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+):
     await db.properties.update_one({"id": prop_id}, {"$set": {"feature_toggles": features}})
     return features
 
@@ -1277,6 +1764,7 @@ app.include_router(users_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(rooms_router, prefix="/api")
 app.include_router(guests_router, prefix="/api")
+app.include_router(event_lodging_router, prefix="/api")
 app.add_middleware(CORSMiddleware, allow_credentials=True,
                    allow_origins=CORS_ORIGINS_LIST,
                    allow_methods=["*"], allow_headers=["*"])

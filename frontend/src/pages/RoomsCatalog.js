@@ -163,13 +163,13 @@ export default function RoomsCatalog() {
       {/* Top Bar */}
       <div className="px-6 py-3 flex items-center justify-between" style={{ background: 'white', borderBottom: '1px solid #e8dfd5' }}>
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center"
-            style={{ border: '1px solid rgba(98,87,70,0.3)' }}>
-            <span style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', color: '#625746', fontSize: '14px', fontStyle: 'italic' }}>ab</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center"
+            style={{ border: '1px solid rgba(98,87,70,0.25)', background: 'rgba(98,87,70,0.06)' }}>
+            <span style={{ fontFamily: 'Manrope, sans-serif', color: '#625746', fontSize: '10px', fontWeight: 700, letterSpacing: '0.06em' }}>S</span>
           </div>
           <div>
-            <span style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', color: '#625746', fontSize: '18px', letterSpacing: '0.05em' }}>alma</span>
-            <span style={{ color: '#917a6a', fontSize: '10px', letterSpacing: '0.18em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginLeft: '6px' }}>HOTEL BOUTIQUE</span>
+            <span style={{ fontFamily: 'Manrope, sans-serif', color: '#625746', fontSize: '16px', fontWeight: 700, letterSpacing: '0.04em' }}>STAYLO</span>
+            <span style={{ color: '#917a6a', fontSize: '10px', letterSpacing: '0.06em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginLeft: '8px' }}>Catálogo</span>
           </div>
         </div>
         {user ? (
@@ -204,8 +204,8 @@ export default function RoomsCatalog() {
 
       {/* Hero */}
       <div className="py-16 px-6 text-center" style={{ background: 'linear-gradient(180deg, #625746 0%, #917a6a 100%)' }}>
-        <p style={{ color: '#d2c7b6', fontSize: '11px', letterSpacing: '0.3em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginBottom: '12px' }}>
-          ALMA HOTEL BOUTIQUE
+        <p style={{ color: '#d2c7b6', fontSize: '11px', letterSpacing: '0.2em', fontFamily: 'Montserrat, sans-serif', fontWeight: 500, marginBottom: '12px' }}>
+          STAYLO
         </p>
         <h1 style={{ fontFamily: 'Cormorant Garamond, Georgia, serif', color: '#fcf5e0', fontSize: '52px', fontWeight: 300, lineHeight: 1.1, letterSpacing: '0.02em', marginBottom: '16px' }}>
           Nuestras Habitaciones
@@ -215,7 +215,7 @@ export default function RoomsCatalog() {
         </p>
         <div className="flex items-center justify-center gap-4 mt-8">
           <div style={{ width: '40px', height: '1px', background: 'rgba(210,199,182,0.4)' }} />
-          <span style={{ color: 'rgba(210,199,182,0.5)', fontSize: '18px', fontFamily: 'Cormorant Garamond, serif', fontStyle: 'italic' }}>alma</span>
+          <span style={{ color: 'rgba(210,199,182,0.6)', fontSize: '12px', fontFamily: 'Manrope, sans-serif', fontWeight: 600, letterSpacing: '0.12em' }}>STAYLO</span>
           <div style={{ width: '40px', height: '1px', background: 'rgba(210,199,182,0.4)' }} />
         </div>
         <Link to="/reservar" className="inline-flex items-center gap-2 mt-8 px-8 py-3 rounded-full font-semibold text-sm transition-all"
@@ -264,7 +264,7 @@ export default function RoomsCatalog() {
           </p>
           <div className="flex items-center justify-center gap-2">
             <div style={{ width: '30px', height: '1px', background: '#d2c7b6' }} />
-            <span style={{ color: '#d2c7b6', fontSize: '16px', fontFamily: 'Cormorant Garamond, serif', fontStyle: 'italic' }}>alma hotel boutique</span>
+            <span style={{ color: '#d2c7b6', fontSize: '13px', fontFamily: 'Manrope, sans-serif', fontWeight: 600, letterSpacing: '0.08em' }}>STAYLO</span>
             <div style={{ width: '30px', height: '1px', background: '#d2c7b6' }} />
           </div>
         </div>
@@ -273,7 +273,7 @@ export default function RoomsCatalog() {
       {/* Footer */}
       <div className="py-6 text-center" style={{ borderTop: '1px solid #e8dfd5' }}>
         <p style={{ color: '#c8b8a8', fontSize: '11px', fontFamily: 'Montserrat, sans-serif', letterSpacing: '0.1em' }}>
-          © 2025 ALMA HOTEL BOUTIQUE. Todos los derechos reservados.
+          © 2025 STAYLO. Todos los derechos reservados.
         </p>
       </div>
     </div>

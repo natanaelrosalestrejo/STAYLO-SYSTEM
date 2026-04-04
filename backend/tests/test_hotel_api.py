@@ -108,14 +108,17 @@ class TestReservations:
         assert len(r.json()) >= 4
         print(f"PASS: Got {len(r.json())} reservations")
 
-    def test_checkin_requires_admin_or_receptionist(self, housekeeping_token):
-        # housekeeping should be forbidden
+    def test_checkin_requires_admin_or_receptionist(self, housekeeping_token, admin_token):
+        # Housekeeping has no "reservations" module — cannot list reservations (module guard).
         r = requests.get(f"{BASE_URL}/api/reservations", headers={"Authorization": f"Bearer {housekeeping_token}"})
-        assert r.status_code == 200
-        res = r.json()
+        assert r.status_code == 403
+
+        res = requests.get(f"{BASE_URL}/api/reservations", headers={"Authorization": f"Bearer {admin_token}"}).json()
         if res:
-            r2 = requests.patch(f"{BASE_URL}/api/reservations/{res[0]['id']}/checkin",
-                                headers={"Authorization": f"Bearer {housekeeping_token}"})
+            r2 = requests.patch(
+                f"{BASE_URL}/api/reservations/{res[0]['id']}/checkin",
+                headers={"Authorization": f"Bearer {housekeeping_token}"},
+            )
             assert r2.status_code == 403
             print("PASS: Housekeeping forbidden from checkin")
 

@@ -1,7 +1,10 @@
 """Backend tests for iteration 8: Rooms CRUD, Staff/owner role, Role Permissions, Public Booking fix"""
+import os
+
 import pytest
 import requests
-import os
+
+from models import DEFAULT_ROLE_PERMISSIONS
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
@@ -107,11 +110,22 @@ class TestRolePermissions:
         print(f"Role permissions roles: {list(data.keys())}")
 
     def test_update_role_permissions(self, platform_token):
-        r = requests.put(f"{BASE_URL}/api/role-permissions/receptionist",
-            json={"modules": ["reservations", "guests"]},
-            headers={"Authorization": f"Bearer {platform_token}"})
-        assert r.status_code == 200
-        print("Role permissions updated")
+        """Mutates Mongo role_permissions for receptionist — must restore so later tests (e.g. maria / rooms) are not polluted."""
+        headers = {"Authorization": f"Bearer {platform_token}"}
+        url = f"{BASE_URL}/api/role-permissions/receptionist"
+        canonical = list(DEFAULT_ROLE_PERMISSIONS["receptionist"])
+        try:
+            r = requests.put(
+                url,
+                json={"modules": ["reservations", "guests"]},
+                headers=headers,
+            )
+            assert r.status_code == 200
+            print("Role permissions updated (narrow slice)")
+        finally:
+            r_restore = requests.put(url, json={"modules": canonical}, headers=headers)
+            assert r_restore.status_code == 200, f"Teardown restore failed: {r_restore.status_code} {r_restore.text}"
+            print("Role permissions restored to code defaults for receptionist")
 
 
 class TestPublicBooking:

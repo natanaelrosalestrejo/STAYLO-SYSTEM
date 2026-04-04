@@ -4,6 +4,7 @@ Runs at startup to populate demo data; safe to call multiple times (each seed is
 Imports only from db, models, and auth to avoid circular imports.
 """
 import uuid
+from typing import Optional
 
 from auth import hash_password
 from db import db
@@ -23,7 +24,21 @@ from models import (
 )
 
 # Demo hotel property id — must match the property created in seed_properties so scope filters work.
+# Garden ids match backend/scripts/reset_staylo_demo.py for one canonical demo shape (3 properties, 4 event spaces).
 DEMO_PROPERTY_ID = "alma_hotel"
+DEMO_GARDEN_MARGATI_ID = "garden_margati"
+DEMO_GARDEN_ALMA_ID = "garden_alma"
+
+# Canonical demo logins: clear custom_permissions on startup so Mongo drift does not shrink effective_modules.
+DEMO_USER_EMAILS = (
+    "admin@hotel.com",
+    "maria@hotel.com",
+    "manager@hotel.com",
+    "carlos@hotel.com",
+    "ana@hotel.com",
+    "owner@hotel.com",
+    "finance@hotel.com",
+)
 
 COLORS = ["#059669", "#3B82F6", "#D97706", "#EF4444", "#8B5CF6", "#EC4899"]
 
@@ -39,7 +54,8 @@ async def seed_data():
             role="admin",
             department="Administración",
             avatar_color="#059669",
-            property_id=DEMO_PROPERTY_ID,
+            property_id=None,
+            property_ids=[DEMO_PROPERTY_ID, DEMO_GARDEN_MARGATI_ID, DEMO_GARDEN_ALMA_ID],
         ),
         UserModel(
             name="María García",
@@ -76,6 +92,25 @@ async def seed_data():
             department="Dirección",
             avatar_color="#8B5CF6",
             property_id=DEMO_PROPERTY_ID,
+        ),
+        UserModel(
+            name="Gerente Demo",
+            email="manager@hotel.com",
+            password_hash=hash_password("manager123"),
+            role="manager",
+            department="Gerencia",
+            avatar_color="#0D9488",
+            property_id=DEMO_PROPERTY_ID,
+        ),
+        UserModel(
+            name="Finanzas Demo",
+            email="finance@hotel.com",
+            password_hash=hash_password("finance123"),
+            role="finance",
+            department="Finanzas",
+            avatar_color="#0891b2",
+            property_id=None,
+            property_ids=[DEMO_PROPERTY_ID, DEMO_GARDEN_MARGATI_ID, DEMO_GARDEN_ALMA_ID],
         ),
         UserModel(
             name="Platform Admin",
@@ -332,47 +367,61 @@ async def seed_data():
 
 
 async def seed_properties():
-    """Seed initial properties and event spaces — runs independently from seed_data."""
+    """Seed properties + event spaces — same shape as reset_staylo_demo: 3 properties, 4 spaces."""
     if await db.properties.count_documents({}) > 0:
         return
     hotel_prop = PropertyModel(
+        id=DEMO_PROPERTY_ID,
         name="Alma Hotel Boutique",
         type="hotel",
         status="active",
         description="Hotel boutique de lujo — 40 habitaciones",
     )
-    garden_prop = PropertyModel(
-        name="Jardín de Amargati",
+    garden_m = PropertyModel(
+        id=DEMO_GARDEN_MARGATI_ID,
+        name="Jardín Margati",
         type="event_garden",
         status="active",
-        description="Jardín de eventos con capacidad para 500 personas",
+        description="Jardín de eventos — espacios al aire libre",
     )
-    hotel_doc = hotel_prop.model_dump()
-    hotel_doc["id"] = DEMO_PROPERTY_ID
-    await db.properties.insert_one(hotel_doc)
-    await db.properties.insert_one(garden_prop.model_dump())
+    garden_a = PropertyModel(
+        id=DEMO_GARDEN_ALMA_ID,
+        name="Jardín Alma",
+        type="event_garden",
+        status="active",
+        description="Jardín de eventos — ceremonias y recepciones",
+    )
+    for p in (hotel_prop, garden_m, garden_a):
+        await db.properties.insert_one(p.model_dump())
 
     spaces = [
         EventSpaceModel(
-            property_id=garden_prop.id,
+            property_id=garden_m.id,
             space_name="Jardín Principal",
             capacity=500,
             price_per_event=50000.0,
             description="Jardín amplio con iluminación y sistema de sonido profesional",
         ),
         EventSpaceModel(
-            property_id=garden_prop.id,
+            property_id=garden_m.id,
             space_name="Salón de Eventos",
             capacity=200,
             price_per_event=30000.0,
             description="Salón climatizado para ceremonias y recepciones",
         ),
         EventSpaceModel(
-            property_id=garden_prop.id,
-            space_name="Terraza VIP",
-            capacity=80,
-            price_per_event=15000.0,
-            description="Terraza exclusiva con vista panorámica",
+            property_id=garden_a.id,
+            space_name="Terraza Alma",
+            capacity=120,
+            price_per_event=25000.0,
+            description="Terraza para ceremonias",
+        ),
+        EventSpaceModel(
+            property_id=garden_a.id,
+            space_name="Césped Central",
+            capacity=300,
+            price_per_event=40000.0,
+            description="Área de césped para eventos",
         ),
     ]
     for s in spaces:
@@ -383,7 +432,7 @@ async def seed_properties():
     today_d = date.today()
     sample_bookings = [
         EventBookingModel(
-            property_id=garden_prop.id,
+            property_id=garden_m.id,
             event_space_id=spaces[0].id,
             event_space_name=spaces[0].space_name,
             client_name="Familia Rodríguez",
@@ -398,7 +447,7 @@ async def seed_properties():
             notes="Boda con decoración floral, necesitan servicio de catering",
         ),
         EventBookingModel(
-            property_id=garden_prop.id,
+            property_id=garden_m.id,
             event_space_id=spaces[1].id,
             event_space_name=spaces[1].space_name,
             client_name="Empresa Innovatec S.A.",
@@ -413,7 +462,7 @@ async def seed_properties():
             notes="Presentación anual de resultados",
         ),
         EventBookingModel(
-            property_id=garden_prop.id,
+            property_id=garden_a.id,
             event_space_id=spaces[2].id,
             event_space_name=spaces[2].space_name,
             client_name="Lucía Fernández",
@@ -425,7 +474,7 @@ async def seed_properties():
             total_price=18000.0,
             booking_status="confirmed",
             payment_status="paid",
-            notes="Quinceañera — decoración rosa y dorado",
+            notes="Celebración familiar",
         ),
     ]
     for b in sample_bookings:
@@ -570,11 +619,137 @@ async def seed_amenities():
         await db.amenities.insert_one(a.model_dump())
 
 
+async def _tenant_id_for_demo_backfill() -> Optional[str]:
+    t = await db.tenants.find_one({}, {"_id": 0, "id": 1})
+    return t["id"] if t else None
+
+
+async def _backfill_user_tenant_ids():
+    """Assign tenant_id to tenant-scoped hotel users (required for non-empty effective_modules)."""
+    tid = await _tenant_id_for_demo_backfill()
+    if not tid:
+        return
+    hotel_roles = [
+        "admin",
+        "owner",
+        "receptionist",
+        "manager",
+        "finance",
+        "housekeeping",
+        "maintenance",
+        "security",
+        "restaurant",
+    ]
+    await db.users.update_many(
+        {
+            "role": {"$in": hotel_roles},
+            "$or": [
+                {"tenant_id": None},
+                {"tenant_id": ""},
+                {"tenant_id": {"$exists": False}},
+            ],
+        },
+        {"$set": {"tenant_id": tid}},
+    )
+
+
+async def _normalize_demo_user_overrides():
+    """Strip custom_permissions on canonical demo emails so role+tenant resolution is predictable."""
+    await db.users.update_many(
+        {"email": {"$in": DEMO_USER_EMAILS}},
+        {"$unset": {"custom_permissions": ""}},
+    )
+
+
+async def seed_demo_manager_if_missing():
+    """Idempotent: cuenta demo gerente para bases ya pobladas sin re-ejecutar seed_data."""
+    if await db.users.find_one({"email": "manager@hotel.com"}):
+        return
+    tid = await _tenant_id_for_demo_backfill()
+    if not tid:
+        return
+    u = UserModel(
+        name="Gerente Demo",
+        email="manager@hotel.com",
+        password_hash=hash_password("manager123"),
+        role="manager",
+        department="Gerencia",
+        avatar_color="#0D9488",
+        property_id=DEMO_PROPERTY_ID,
+        tenant_id=tid,
+    )
+    await db.users.insert_one(u.model_dump())
+
+
+async def seed_demo_manager_multi_if_missing():
+    """Idempotent: gerente con property_ids (hotel + un jardín) para probar alcance multi-propiedad."""
+    if await db.users.find_one({"email": "manager_multi@hotel.com"}):
+        return
+    tid = await _tenant_id_for_demo_backfill()
+    if not tid:
+        return
+    u = UserModel(
+        name="Gerente Multi-sede",
+        email="manager_multi@hotel.com",
+        password_hash=hash_password("manager123"),
+        role="manager",
+        department="Gerencia",
+        avatar_color="#0F766E",
+        property_id=None,
+        property_ids=[DEMO_PROPERTY_ID, DEMO_GARDEN_MARGATI_ID],
+        tenant_id=tid,
+    )
+    await db.users.insert_one(u.model_dump())
+
+
+async def seed_demo_finance_if_missing():
+    """Idempotent: cuenta demo finanzas (misma forma que reset) cuando la BD ya existía sin seed_data."""
+    if await db.users.find_one({"email": "finance@hotel.com"}):
+        return
+    tid = await _tenant_id_for_demo_backfill()
+    if not tid:
+        return
+    u = UserModel(
+        name="Finanzas Demo",
+        email="finance@hotel.com",
+        password_hash=hash_password("finance123"),
+        role="finance",
+        department="Finanzas",
+        avatar_color="#0891b2",
+        property_id=None,
+        property_ids=[DEMO_PROPERTY_ID, DEMO_GARDEN_MARGATI_ID, DEMO_GARDEN_ALMA_ID],
+        tenant_id=tid,
+    )
+    await db.users.insert_one(u.model_dump())
+
+
+async def seed_demo_housekeeping_if_missing():
+    """Idempotent: housekeeping demo user (matches reset) when DB was populated without seed_data."""
+    if await db.users.find_one({"email": "carlos@hotel.com"}):
+        return
+    tid = await _tenant_id_for_demo_backfill()
+    if not tid:
+        return
+    u = UserModel(
+        name="Carlos López",
+        email="carlos@hotel.com",
+        password_hash=hash_password("house123"),
+        role="housekeeping",
+        department="Housekeeping",
+        avatar_color="#D97706",
+        property_id=DEMO_PROPERTY_ID,
+        tenant_id=tid,
+    )
+    await db.users.insert_one(u.model_dump())
+
+
 async def _backfill_demo_scope():
     """One-time backfill: assign DEMO_PROPERTY_ID to existing users/rooms that have none (e.g. DBs seeded before scope was added)."""
     hotel_roles = [
         "admin",
         "receptionist",
+        "manager",
+        "finance",
         "housekeeping",
         "maintenance",
         "security",
@@ -585,7 +760,20 @@ async def _backfill_demo_scope():
         {
             "$and": [
                 {"role": {"$in": hotel_roles}},
-                {"$or": [{"property_id": None}, {"property_id": {"$exists": False}}]},
+                {
+                    "$or": [
+                        {"property_id": None},
+                        {"property_id": {"$exists": False}},
+                        {"property_id": ""},
+                    ]
+                },
+                {
+                    "$or": [
+                        {"property_ids": {"$exists": False}},
+                        {"property_ids": None},
+                        {"property_ids": []},
+                    ]
+                },
             ]
         },
         {"$set": {"property_id": DEMO_PROPERTY_ID}},
@@ -594,6 +782,68 @@ async def _backfill_demo_scope():
         {"$or": [{"property_id": None}, {"property_id": {"$exists": False}}]},
         {"$set": {"property_id": DEMO_PROPERTY_ID}},
     )
+
+
+async def _repair_receptionist_module_sources():
+    """
+    Mongo drift from Platform Admin can strip 'rooms' from receptionists via:
+    - role_permissions document that replaces receptionist modules without 'rooms'
+    - tenant module_config whitelist that includes other hotel modules but omits 'rooms'
+
+    Remove those inconsistent overrides so DEFAULT_ROLE_PERMISSIONS applies (includes rooms).
+    """
+    doc = await db.role_permissions.find_one({"role": "receptionist"}, {"_id": 0})
+    if doc and isinstance(doc.get("modules"), list) and "rooms" not in doc["modules"]:
+        await db.role_permissions.delete_one({"role": "receptionist"})
+
+    async for t in db.tenants.find({"module_config": {"$exists": True}}):
+        mc = t.get("module_config") or {}
+        if mc.get("mode") != "whitelist":
+            continue
+        em = mc.get("enabled_modules")
+        if not isinstance(em, list) or not em:
+            continue
+        keys = set(em)
+        hotelish = {"reservations", "guests", "inbox", "tasks", "dashboard"}
+        if keys & hotelish and "rooms" not in keys:
+            await db.tenants.update_one({"id": t["id"]}, {"$unset": {"module_config": ""}})
+
+
+async def seed_demo_tasks_if_fewer_than(min_count: int = 3):
+    """Ensure canonical demo has at least min_count tasks (matches reset script and hotel_api tests)."""
+    n = await db.tasks.count_documents({})
+    if n >= min_count:
+        return
+    admin = await db.users.find_one({"email": "admin@hotel.com"}, {"_id": 0})
+    if not admin:
+        return
+    room = await db.rooms.find_one({"property_id": DEMO_PROPERTY_ID}, {"_id": 0, "id": 1, "number": 1})
+    if not room:
+        room = await db.rooms.find_one({}, {"_id": 0, "id": 1, "number": 1})
+    if not room:
+        return
+    need = min_count - n
+    templates = [
+        ("Limpieza habitación demo", "housekeeping"),
+        ("Revisión técnica demo", "maintenance"),
+        ("Preparación recepción demo", "reception"),
+    ]
+    for i in range(need):
+        title, cat = templates[i % len(templates)]
+        task = TaskModel(
+            title=f"{title} {i + 1}",
+            description="Tarea demo — asegurada por seed idempotente",
+            assigned_to=admin["id"],
+            assigned_to_name=admin["name"],
+            assigned_by=admin["id"],
+            assigned_by_name=admin["name"],
+            room_id=room["id"],
+            room_number=str(room.get("number") or "1"),
+            priority="medium",
+            status="pending",
+            category=cat,
+        )
+        await db.tasks.insert_one(task.model_dump())
 
 
 async def run_all():
@@ -606,3 +856,11 @@ async def run_all():
     await seed_room_types()
     await seed_amenities()
     await _backfill_demo_scope()
+    await _backfill_user_tenant_ids()
+    await _normalize_demo_user_overrides()
+    await _repair_receptionist_module_sources()
+    await seed_demo_tasks_if_fewer_than(3)
+    await seed_demo_manager_if_missing()
+    await seed_demo_manager_multi_if_missing()
+    await seed_demo_finance_if_missing()
+    await seed_demo_housekeeping_if_missing()

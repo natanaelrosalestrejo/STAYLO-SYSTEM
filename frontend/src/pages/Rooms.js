@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '../utils/api';
 import { toast } from 'sonner';
 import { Plus, BedDouble, X, Search, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useProperty } from '../contexts/PropertyContext';
+import { getAssignedPropertyIds } from '../utils/propertyScope';
 
 const STATUS_OPTS = ['available', 'occupied', 'cleaning', 'maintenance', 'reserved'];
 const STATUS_LABELS = { available: 'Disponible', occupied: 'Ocupada', cleaning: 'Limpieza', maintenance: 'Mantenimiento', reserved: 'Reservada' };
@@ -37,6 +39,7 @@ const RoomCard = ({ room, onStatusClick, onEditClick, canManage }) => (
 
 export default function Rooms() {
   const { user } = useAuth();
+  const { selectedPropertyId, properties } = useProperty();
   const canManage = ['admin', 'platform_admin'].includes(user?.role);
   const [rooms, setRooms] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
@@ -56,8 +59,33 @@ export default function Rooms() {
 
   useEffect(() => { fetchRooms(); }, []);
 
-  const floors = [...new Set(rooms.map(r => r.floor))].sort();
-  const filtered = rooms.filter(r => {
+  const assignedPropIds = useMemo(() => getAssignedPropertyIds(user), [user]);
+
+  /** Inventario hotel: filtro local coherente con selector; GET /rooms ya viene acotado en servidor. */
+  const effectiveHotelPropertyId = useMemo(() => {
+    if (!selectedPropertyId || selectedPropertyId === 'all') {
+      if (assignedPropIds.length === 1) {
+        const only = assignedPropIds[0];
+        const p = properties.find((x) => x.id === only);
+        if (p?.type === 'hotel') return only;
+      }
+      if (user?.property_id && ['receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(user?.role)) {
+        return user.property_id;
+      }
+      return null;
+    }
+    const sel = properties.find((p) => p.id === selectedPropertyId);
+    if (sel?.type === 'hotel') return selectedPropertyId;
+    return null;
+  }, [selectedPropertyId, properties, user?.property_id, user?.role, assignedPropIds]);
+
+  const roomsInScope = useMemo(() => {
+    if (!effectiveHotelPropertyId) return rooms;
+    return rooms.filter((r) => r.property_id === effectiveHotelPropertyId);
+  }, [rooms, effectiveHotelPropertyId]);
+
+  const floors = [...new Set(roomsInScope.map(r => r.floor))].sort();
+  const filtered = roomsInScope.filter(r => {
     if (statusFilter !== 'all' && r.status !== statusFilter) return false;
     if (floorFilter !== 'all' && r.floor !== parseInt(floorFilter)) return false;
     if (search && !r.number.toLowerCase().includes(search.toLowerCase())) return false;
@@ -122,14 +150,16 @@ export default function Rooms() {
     } catch (e) { toast.error(e.response?.data?.detail || 'Error al eliminar'); }
   };
 
-  const counts = STATUS_OPTS.reduce((acc, s) => ({ ...acc, [s]: rooms.filter(r => r.status === s).length }), {});
+  const counts = STATUS_OPTS.reduce((acc, s) => ({ ...acc, [s]: roomsInScope.filter(r => r.status === s).length }), {});
 
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>Habitaciones</h1>
-          <p className="text-sm text-slate-500">{rooms.length} habitaciones · Haz clic para cambiar estado</p>
+          <p className="text-sm text-slate-500">
+            {roomsInScope.length} habitaciones{rooms.length !== roomsInScope.length ? ` (${rooms.length} en API)` : ''} · Haz clic para cambiar estado
+          </p>
         </div>
         {canManage && (
           <button data-testid="new-room-btn" onClick={() => setShowCreateModal(true)}
@@ -141,7 +171,7 @@ export default function Rooms() {
 
       {/* Status summary */}
       <div className="flex gap-3 flex-wrap">
-        {[['all', 'Todas', 'bg-slate-900 text-white', rooms.length], ...STATUS_OPTS.map(s => [s, STATUS_LABELS[s], `status-${s}`, counts[s]])].map(([key, label, cls, count]) => (
+        {[['all', 'Todas', 'bg-slate-900 text-white', roomsInScope.length], ...STATUS_OPTS.map(s => [s, STATUS_LABELS[s], `status-${s}`, counts[s]])].map(([key, label, cls, count]) => (
           <button key={key} data-testid={`filter-${key}`} onClick={() => setStatusFilter(key)}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${statusFilter === key ? 'ring-2 ring-slate-400' : ''} ${cls}`}>
             {label} <span className="bg-white/30 px-1.5 py-0.5 rounded-full">{count}</span>

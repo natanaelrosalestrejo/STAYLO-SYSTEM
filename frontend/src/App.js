@@ -1,4 +1,5 @@
 import "@/App.css";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -20,14 +21,39 @@ import CorporateDashboard from "./pages/CorporateDashboard";
 import EventGarden from "./pages/EventGarden";
 import HotelsOverview from "./pages/HotelsOverview";
 import EventGardensOverview from "./pages/EventGardensOverview";
+import OwnerHotelSummary from "./pages/OwnerHotelSummary";
+import OwnerGardenSummary from "./pages/OwnerGardenSummary";
 import PropertyManagement from "./pages/PropertyManagement";
 import PlatformAdmin from "./pages/PlatformAdmin";
 import HotelEvents from "./pages/HotelEvents";
 import RoomTypes from "./pages/RoomTypes";
 import { canAccessRoute, getDefaultPathForRole } from "./utils/permissions";
 
+function hasEffectiveModules(user) {
+  if (!user || user.role === 'platform_admin') return true;
+  return Array.isArray(user.modules) && user.modules.length > 0;
+}
+
+function LoginRoute() {
+  const { user, logout } = useAuth();
+  useEffect(() => {
+    if (user && !hasEffectiveModules(user)) logout();
+  }, [user, logout]);
+  if (!user) return <Login />;
+  if (!hasEffectiveModules(user)) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <p className="text-slate-500 text-sm">Cerrando sesión…</p>
+      </div>
+    );
+  }
+  const next = getDefaultPathForRole(user);
+  if (next) return <Navigate to={next} replace />;
+  return <Login />;
+}
+
 const ProtectedRoute = ({ children, allowedRoles = null }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const location = useLocation();
   if (loading) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -38,8 +64,16 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
+  if (!hasEffectiveModules(user)) {
+    logout();
+    return <Navigate to="/login" replace />;
+  }
   if (!canAccessRoute(user, location.pathname, allowedRoles)) {
-    const fallback = getDefaultPathForRole(user.role);
+    const fallback = getDefaultPathForRole(user);
+    if (fallback == null) {
+      logout();
+      return <Navigate to="/login" replace />;
+    }
     return <Navigate to={fallback} replace />;
   }
   return <Layout>{children}</Layout>;
@@ -47,28 +81,32 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
 
 function AppRoutes() {
   const { user } = useAuth();
-  const defaultPath = user ? getDefaultPathForRole(user.role) : '/login';
+  const defaultPath = user
+    ? (getDefaultPathForRole(user) ?? (user.role === 'platform_admin' ? '/platform-admin' : '/login'))
+    : '/login';
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to={defaultPath} replace /> : <Login />} />
+      <Route path="/login" element={<LoginRoute />} />
       <Route path="/platform-admin" element={<ProtectedRoute allowedRoles={['platform_admin']}><PlatformAdmin /></ProtectedRoute>} />
       <Route path="/platform-admin/:section" element={<ProtectedRoute allowedRoles={['platform_admin']}><PlatformAdmin /></ProtectedRoute>} />
       <Route path="/corporate" element={<ProtectedRoute allowedRoles={['admin','owner']}><CorporateDashboard /></ProtectedRoute>} />
       <Route path="/hotels" element={<ProtectedRoute allowedRoles={['admin','owner']}><HotelsOverview /></ProtectedRoute>} />
       <Route path="/event-gardens" element={<ProtectedRoute allowedRoles={['admin','owner']}><EventGardensOverview /></ProtectedRoute>} />
-      <Route path="/" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Reservations /></ProtectedRoute>} />
-      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Rooms /></ProtectedRoute>} />
-      <Route path="/guests" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><Guests /></ProtectedRoute>} />
-      <Route path="/jardines" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><EventGarden /></ProtectedRoute>} />
-      <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager']}><HotelEvents /></ProtectedRoute>} />
+      <Route path="/owner/hotel/:propertyId" element={<ProtectedRoute allowedRoles={['owner']}><OwnerHotelSummary /></ProtectedRoute>} />
+      <Route path="/owner/garden/:propertyId" element={<ProtectedRoute allowedRoles={['owner']}><OwnerGardenSummary /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Dashboard /></ProtectedRoute>} />
+      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Reservations /></ProtectedRoute>} />
+      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Rooms /></ProtectedRoute>} />
+      <Route path="/guests" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Guests /></ProtectedRoute>} />
+      <Route path="/jardines" element={<ProtectedRoute allowedRoles={['admin','manager','owner']}><EventGarden /></ProtectedRoute>} />
+      <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['admin','manager','owner']}><HotelEvents /></ProtectedRoute>} />
       <Route path="/room-types" element={<ProtectedRoute allowedRoles={['admin','manager']}><RoomTypes /></ProtectedRoute>} />
       <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','owner','manager']}><Reports /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','owner','manager','finance']}><Reports /></ProtectedRoute>} />
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['admin','platform_admin','manager']}><Staff /></ProtectedRoute>} />
       <Route path="/properties" element={<ProtectedRoute allowedRoles={['admin']}><PropertyManagement /></ProtectedRoute>} />
-      <Route path="/catalogo" element={<RoomsCatalog />} />
+      <Route path="/catalogo" element={<ProtectedRoute allowedRoles={['admin', 'receptionist', 'manager', 'owner']}><RoomsCatalog /></ProtectedRoute>} />
       <Route path="/reservar" element={<BookingWizard />} />
       <Route path="/mi-reserva" element={<BookingLookup />} />
       <Route path="*" element={<Navigate to={defaultPath} replace />} />

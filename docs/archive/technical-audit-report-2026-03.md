@@ -1,3 +1,8 @@
+> **Archived document.** Snapshot de arquitectura (marzo 2026); la estructura del repo ha evolucionado (routers modularizados, `auth.py`, `seeds/run.py`, etc.).  
+> **Superseded by (estado vivo):** [architecture-backend-status.md](../architecture-backend-status.md) e índice en [docs/README.md](../README.md).
+
+---
+
 # STAYLO-SYSTEM — Informe de auditoría técnica
 
 **Fecha:** 14 de marzo de 2026  

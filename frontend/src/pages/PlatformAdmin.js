@@ -675,6 +675,7 @@ function RoomTypesTab({ roomTypes, amenities, onRefresh }) {
 
 // ─── Role Permissions Tab ─────────────────────────────────────
 const ALL_MODULES = [
+  // Hotel / plataforma
   { key: 'dashboard',       label: 'Dashboard Operacional' },
   { key: 'reservations',    label: 'Reservas' },
   { key: 'rooms',           label: 'Habitaciones' },
@@ -684,21 +685,38 @@ const ALL_MODULES = [
   { key: 'tasks',           label: 'Tareas' },
   { key: 'catalog',         label: 'Catálogo Público' },
   { key: 'reports',         label: 'Reportes' },
+  { key: 'manager_financial_view', label: 'Finanzas solo propiedades (gerente)' },
   { key: 'staff',           label: 'Personal' },
   { key: 'properties',      label: 'Propiedades' },
   { key: 'corporate',       label: 'Dashboard Corporativo' },
   { key: 'hotels',          label: 'Vista Hoteles' },
   { key: 'event-gardens',   label: 'Vista Jardines' },
+  // Jardines — módulos dedicados (Phase 1 templates)
+  { key: 'garden_dashboard',          label: 'Dashboard Jardín' },
+  { key: 'garden_event_bookings',     label: 'Eventos Jardín' },
+  { key: 'garden_event_spaces',       label: 'Espacios Jardín' },
+  { key: 'garden_lodging_integration',label: 'Hospedaje Jardín' },
+  { key: 'garden_guest_list',         label: 'Invitados / Lista' },
+  { key: 'garden_sales',              label: 'Ventas Jardín' },
 ];
 
 const ROLES_EDITABLE = [
-  { value: 'admin',        label: 'Admin — Hotel Admin',   color: 'bg-emerald-50 text-emerald-700' },
-  { value: 'owner',        label: 'Propietario',            color: 'bg-violet-50 text-violet-700' },
-  { value: 'receptionist', label: 'Recepcionista',          color: 'bg-blue-50 text-blue-700' },
-  { value: 'housekeeping', label: 'Staff — Housekeeping',   color: 'bg-amber-50 text-amber-700' },
-  { value: 'maintenance',  label: 'Staff — Mantenimiento',  color: 'bg-orange-50 text-orange-700' },
-  { value: 'security',     label: 'Staff — Seguridad',      color: 'bg-red-50 text-red-700' },
-  { value: 'restaurant',   label: 'Staff — Restaurante',    color: 'bg-pink-50 text-pink-700' },
+  // Roles hotel
+  { value: 'admin',        label: 'Grupo — Administrador',        color: 'bg-emerald-50 text-emerald-700' },
+  { value: 'owner',        label: 'Hotel — Propietario',  color: 'bg-violet-50 text-violet-700' },
+  { value: 'manager',      label: 'Hotel — Gerente',      color: 'bg-teal-50 text-teal-700' },
+  { value: 'finance',      label: 'Hotel — Finanzas',     color: 'bg-cyan-50 text-cyan-800' },
+  { value: 'receptionist', label: 'Hotel — Recepción',    color: 'bg-blue-50 text-blue-700' },
+  { value: 'housekeeping', label: 'Hotel — Housekeeping', color: 'bg-amber-50 text-amber-700' },
+  { value: 'maintenance',  label: 'Hotel — Mantenimiento',color: 'bg-orange-50 text-orange-700' },
+  { value: 'security',     label: 'Hotel — Seguridad',    color: 'bg-red-50 text-red-700' },
+  { value: 'restaurant',   label: 'Hotel — Restaurante',  color: 'bg-pink-50 text-pink-700' },
+  // Roles jardín (nuevos)
+  { value: 'garden_admin',      label: 'Jardín — Admin',      color: 'bg-emerald-50 text-emerald-700' },
+  { value: 'garden_manager',    label: 'Jardín — Manager',    color: 'bg-blue-50 text-blue-700' },
+  { value: 'garden_sales',      label: 'Jardín — Ventas',     color: 'bg-purple-50 text-purple-700' },
+  { value: 'garden_reception',  label: 'Jardín — Recepción',  color: 'bg-amber-50 text-amber-700' },
+  { value: 'garden_staff',      label: 'Jardín — Staff',      color: 'bg-slate-50 text-slate-700' },
 ];
 
 function RolePermissionsTab() {
@@ -1283,12 +1301,12 @@ const PLATFORM_ADMIN_SUBTYPES = [
   { value: 'platform_support', label: 'Platform Support', requiresProperty: false },
   { value: 'billing_admin',   label: 'Billing Admin',   requiresProperty: false },
   { value: 'technical_admin', label: 'Technical Admin', requiresProperty: false },
-  { value: 'hotel_admin',     label: 'Hotel Admin',     requiresProperty: true },
+  { value: 'hotel_admin',     label: 'Admin de hotel (plataforma)',     requiresProperty: true },
 ];
 
 const ADMIN_TYPE_LABELS = {
   platform_admin: 'Platform Admin', platform_support: 'Platform Support',
-  billing_admin: 'Billing Admin', technical_admin: 'Technical Admin', hotel_admin: 'Hotel Admin',
+  billing_admin: 'Billing Admin', technical_admin: 'Technical Admin', hotel_admin: 'Admin de hotel (plataforma)',
 };
 
 const PLATFORM_MODULES = [
@@ -1310,7 +1328,7 @@ const PLATFORM_MODULES = [
 ];
 
 const EMPTY_PUSR = {
-  name: '', email: '', password: '', roleGroup: 'admin', adminType: 'platform_admin',
+  name: '', email: '', password: '', roleGroup: 'admin', adminType: 'platform_admin', gardenRole: 'garden_admin',
   tenantId: '', propertyId: '', isActive: true, customPerms: [], showCustom: false,
 };
 
@@ -1321,7 +1339,7 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
   const [form, setForm]           = useState(EMPTY_PUSR);
 
   const platformUsers = users.filter(u =>
-    ['platform_admin', 'admin', 'owner', 'manager'].includes(u.role)
+    ['platform_admin', 'admin', 'owner', 'manager', 'garden_admin', 'garden_manager', 'garden_sales', 'garden_reception', 'garden_staff'].includes(u.role)
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -1330,12 +1348,14 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
   const openEdit = (u) => {
     let roleGroup = 'admin';
     let adminType = u.admin_type || 'platform_admin';
+    let gardenRole = 'garden_admin';
     if (u.role === 'owner') { roleGroup = 'owner'; adminType = null; }
     else if (u.role === 'manager') { roleGroup = 'manager'; adminType = null; }
     else if (u.role === 'admin') { adminType = 'hotel_admin'; }
+    else if (u.role && u.role.startsWith('garden_')) { roleGroup = 'garden'; gardenRole = u.role; adminType = null; }
     setForm({
       name: u.name, email: u.email, password: '',
-      roleGroup, adminType,
+      roleGroup, adminType, gardenRole,
       tenantId: u.tenant_id || '', propertyId: u.property_id || '',
       isActive: u.is_active,
       customPerms: u.custom_permissions || [],
@@ -1352,12 +1372,13 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
   const resolveRolePayload = () => {
     if (form.roleGroup === 'owner')   return { role: 'owner',          admin_type: null };
     if (form.roleGroup === 'manager') return { role: 'manager',        admin_type: null };
+    if (form.roleGroup === 'garden')  return { role: form.gardenRole || 'garden_admin', admin_type: null };
     if (form.adminType === 'hotel_admin') return { role: 'admin',      admin_type: 'hotel_admin' };
     return { role: 'platform_admin', admin_type: form.adminType };
   };
 
   const needsProperty = () =>
-    form.roleGroup === 'owner' || form.roleGroup === 'manager' || form.adminType === 'hotel_admin';
+    form.roleGroup === 'owner' || form.roleGroup === 'manager' || form.roleGroup === 'garden' || form.adminType === 'hotel_admin';
 
   const filteredProps = form.tenantId
     ? properties.filter(p => p.tenant_id === form.tenantId)
@@ -1391,9 +1412,14 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
 
   const getUserRoleDisplay = (u) => {
     if (u.role === 'platform_admin') return { label: ADMIN_TYPE_LABELS[u.admin_type] || 'Platform Admin', color: 'bg-slate-100 text-slate-800' };
-    if (u.role === 'admin')    return { label: 'Hotel Admin',  color: 'bg-emerald-100 text-emerald-700' };
+    if (u.role === 'admin')    return { label: 'Administrador de grupo',  color: 'bg-emerald-100 text-emerald-700' };
     if (u.role === 'owner')    return { label: 'Propietario',  color: 'bg-violet-100 text-violet-700' };
     if (u.role === 'manager')  return { label: 'Gerente',      color: 'bg-blue-100 text-blue-700' };
+    if (u.role === 'garden_admin')     return { label: 'Admin Jardín',     color: 'bg-emerald-50 text-emerald-700' };
+    if (u.role === 'garden_manager')   return { label: 'Manager Jardín',   color: 'bg-blue-50 text-blue-700' };
+    if (u.role === 'garden_sales')     return { label: 'Ventas Jardín',    color: 'bg-purple-50 text-purple-700' };
+    if (u.role === 'garden_reception') return { label: 'Recepción Jardín', color: 'bg-amber-50 text-amber-700' };
+    if (u.role === 'garden_staff')     return { label: 'Staff Jardín',     color: 'bg-slate-50 text-slate-700' };
     return { label: u.role, color: 'bg-slate-100 text-slate-600' };
   };
 
@@ -1520,12 +1546,12 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
               {/* Role group */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rol *</label>
-                <div className="flex gap-2">
-                  {[{ value: 'admin', label: 'Admin' }, { value: 'owner', label: 'Propietario' }, { value: 'manager', label: 'Gerente' }].map(r => (
+                <div className="flex flex-wrap gap-2">
+                  {[{ value: 'admin', label: 'Admin / Plataforma' }, { value: 'owner', label: 'Propietario' }, { value: 'manager', label: 'Gerente Hotel' }, { value: 'garden', label: 'Rol Jardín' }].map(r => (
                     <button key={r.value} type="button"
                       data-testid={`role-group-${r.value}`}
                       onClick={() => { set('roleGroup', r.value); if (r.value !== 'admin') set('adminType', null); }}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${form.roleGroup === r.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                      className={`flex-1 min-w-[120px] py-2 rounded-lg text-sm font-medium border transition-all ${form.roleGroup === r.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                       {r.label}
                     </button>
                   ))}
@@ -1546,6 +1572,30 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Garden role selector */}
+              {form.roleGroup === 'garden' && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rol de Jardín</label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { value: 'garden_admin', label: 'Admin Jardín' },
+                      { value: 'garden_manager', label: 'Manager Jardín' },
+                      { value: 'garden_sales', label: 'Ventas Jardín' },
+                      { value: 'garden_reception', label: 'Recepción Jardín' },
+                      { value: 'garden_staff', label: 'Staff Jardín' },
+                    ].map(r => (
+                      <button key={r.value} type="button"
+                        data-testid={`garden-role-${r.value}`}
+                        onClick={() => set('gardenRole', r.value)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${form.gardenRole === r.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
+                        {r.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-400">Los roles de jardín requieren asignar una propiedad tipo Jardín de Eventos.</p>
                 </div>
               )}
 

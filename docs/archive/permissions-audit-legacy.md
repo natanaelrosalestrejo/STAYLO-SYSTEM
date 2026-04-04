@@ -1,3 +1,9 @@
+> **Archived document.** Referencia histórica (auditoría funcional y diseño).  
+> **Superseded by (canonical):** [permissions/product-model.md](../permissions/product-model.md) y [permissions/resolution-rfc.md](../permissions/resolution-rfc.md).  
+> Índice: [docs/README.md](../README.md).
+
+---
+
 # STAYLO — Permissions System: Functional Audit and Design Review
 
 **Purpose:** Clarify how permissions work today, where the source of truth is, and recommend a clean product design before changing the UI.  
