@@ -8,7 +8,7 @@ import { Eye, EyeOff, Lock, Mail, Layers } from 'lucide-react';
 
 const DEMO_ACCOUNTS = [
   { email: 'platform@almasystem.com', password: 'platform123', role: 'Platform Admin' },
-  { email: 'admin@hotel.com', password: 'admin123', role: 'Administrador de grupo' },
+  { email: 'admin@hotel.com', password: 'admin123', role: 'Gerente operativo (grupo)' },
   { email: 'owner@hotel.com', password: 'owner123', role: 'Owner' },
   { email: 'maria@hotel.com', password: 'recep123', role: 'Recepción' },
 ];

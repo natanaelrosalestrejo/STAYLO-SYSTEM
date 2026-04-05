@@ -3,7 +3,7 @@
  * - owner: vista amplia (estratégica / consolidada) + operativo cuando aplica.
  * - finance: hogar financiero; solo secciones de ingresos/cobros/desgloses; sin widgets operativos de habitación.
  * - manager con solo manager_financial_view: mismo alcance acotado que finance (sin módulo reports).
- * - manager/admin con módulo reports: informe completo; textos acotados a propiedades si no es owner.
+ * - manager con módulo reports: informe completo; textos acotados a propiedades si no es owner.
  */
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
@@ -39,15 +39,15 @@ export default function Reports() {
   const mods = Array.isArray(user?.modules) ? user.modules : [];
   const isFinance = role === 'finance';
   const isOwner = role === 'owner';
-  const isAdmin = role === 'admin';
+  const isGroupOpsManager = role === 'manager';
   const hasFullReportsModule = mods.includes('reports');
   const hasManagerFinancialView = mods.includes('manager_financial_view');
   const canExportCsv = routeSatisfiedByModules(mods, 'reports');
   /** Sin /reports/dashboard: solo ingresos/cobros/desgloses (finance o gerente solo con vista financiera). */
   const narrowFinancialUi =
     isFinance || (role === 'manager' && hasManagerFinancialView && !hasFullReportsModule);
-  /** Copy de portafolio / consolidado (alineado con scope amplio owner+admin en backend). */
-  const strategicPortfolioCopy = isOwner || isAdmin;
+  /** Copy de portafolio / consolidado (alineado con scope amplio owner+gerente de grupo en backend). */
+  const strategicPortfolioCopy = isOwner || isGroupOpsManager;
 
   const [stats, setStats] = useState(null);
   const [occupancy, setOccupancy] = useState(null);

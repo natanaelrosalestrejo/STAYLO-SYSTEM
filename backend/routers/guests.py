@@ -57,7 +57,7 @@ async def delete_guest(guest_id: str, current_user: UserModel = Depends(require_
 async def toggle_vip(
     guest_id: str,
     _: UserModel = Depends(require_module("guests")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     guest = await db.guests.find_one({"id": guest_id})
     if not guest: raise HTTPException(status_code=404, detail="Huésped no encontrado")

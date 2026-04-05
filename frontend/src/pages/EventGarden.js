@@ -95,8 +95,8 @@ export default function EventGarden() {
     }
     return gardens[0];
   }, [properties, propIdFromUrl, selectedPropertyId]);
-  const isAdmin = user?.role === 'admin';
-  const isReceptionist = ['admin', 'receptionist'].includes(user?.role);
+  const isAdmin = user?.role === 'manager';
+  const isReceptionist = ['manager', 'receptionist', 'sales'].includes(user?.role);
 
   const fetchData = async () => {
     try {

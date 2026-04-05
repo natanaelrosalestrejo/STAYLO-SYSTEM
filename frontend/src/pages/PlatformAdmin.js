@@ -702,11 +702,11 @@ const ALL_MODULES = [
 
 const ROLES_EDITABLE = [
   // Roles hotel
-  { value: 'admin',        label: 'Grupo — Administrador',        color: 'bg-emerald-50 text-emerald-700' },
   { value: 'owner',        label: 'Hotel — Propietario',  color: 'bg-violet-50 text-violet-700' },
   { value: 'manager',      label: 'Hotel — Gerente',      color: 'bg-teal-50 text-teal-700' },
   { value: 'finance',      label: 'Hotel — Finanzas',     color: 'bg-cyan-50 text-cyan-800' },
   { value: 'receptionist', label: 'Hotel — Recepción',    color: 'bg-blue-50 text-blue-700' },
+  { value: 'sales',        label: 'Hotel — Ventas',       color: 'bg-indigo-50 text-indigo-800' },
   { value: 'housekeeping', label: 'Hotel — Housekeeping', color: 'bg-amber-50 text-amber-700' },
   { value: 'maintenance',  label: 'Hotel — Mantenimiento',color: 'bg-orange-50 text-orange-700' },
   { value: 'security',     label: 'Hotel — Seguridad',    color: 'bg-red-50 text-red-700' },
@@ -722,7 +722,7 @@ const ROLES_EDITABLE = [
 function RolePermissionsTab() {
   const [perms, setPerms] = useState({});
   const [saving, setSaving] = useState(null);
-  const [activeRole, setActiveRole] = useState('admin');
+  const [activeRole, setActiveRole] = useState('manager');
 
   const fetchPerms = async () => {
     try { const r = await api.get('/role-permissions'); setPerms(r.data); } catch {}
@@ -1328,7 +1328,7 @@ const PLATFORM_MODULES = [
 ];
 
 const EMPTY_PUSR = {
-  name: '', email: '', password: '', roleGroup: 'admin', adminType: 'platform_admin', gardenRole: 'garden_admin',
+  name: '', email: '', password: '', roleGroup: 'manager', adminType: 'platform_admin', gardenRole: 'garden_admin',
   tenantId: '', propertyId: '', isActive: true, customPerms: [], showCustom: false,
 };
 
@@ -1339,19 +1339,22 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
   const [form, setForm]           = useState(EMPTY_PUSR);
 
   const platformUsers = users.filter(u =>
-    ['platform_admin', 'admin', 'owner', 'manager', 'garden_admin', 'garden_manager', 'garden_sales', 'garden_reception', 'garden_staff'].includes(u.role)
+    ['platform_admin', 'owner', 'manager', 'garden_admin', 'garden_manager', 'garden_sales', 'garden_reception', 'garden_staff'].includes(u.role)
   );
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const openCreate = () => { setForm(EMPTY_PUSR); setEditId(null); setShowModal(true); };
 
   const openEdit = (u) => {
-    let roleGroup = 'admin';
+    let roleGroup = 'platform';
     let adminType = u.admin_type || 'platform_admin';
     let gardenRole = 'garden_admin';
     if (u.role === 'owner') { roleGroup = 'owner'; adminType = null; }
-    else if (u.role === 'manager') { roleGroup = 'manager'; adminType = null; }
-    else if (u.role === 'admin') { adminType = 'hotel_admin'; }
+    else if (u.role === 'manager') {
+      if (u.admin_type === 'hotel_admin') { roleGroup = 'platform'; adminType = 'hotel_admin'; }
+      else { roleGroup = 'manager'; adminType = null; }
+    }
+    else if (u.role === 'platform_admin') { roleGroup = 'platform'; adminType = u.admin_type || 'platform_admin'; }
     else if (u.role && u.role.startsWith('garden_')) { roleGroup = 'garden'; gardenRole = u.role; adminType = null; }
     setForm({
       name: u.name, email: u.email, password: '',
@@ -1373,12 +1376,18 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
     if (form.roleGroup === 'owner')   return { role: 'owner',          admin_type: null };
     if (form.roleGroup === 'manager') return { role: 'manager',        admin_type: null };
     if (form.roleGroup === 'garden')  return { role: form.gardenRole || 'garden_admin', admin_type: null };
-    if (form.adminType === 'hotel_admin') return { role: 'admin',      admin_type: 'hotel_admin' };
+    if (form.roleGroup === 'platform') {
+      if (form.adminType === 'hotel_admin') return { role: 'manager', admin_type: 'hotel_admin' };
+      return { role: 'platform_admin', admin_type: form.adminType };
+    }
     return { role: 'platform_admin', admin_type: form.adminType };
   };
 
   const needsProperty = () =>
-    form.roleGroup === 'owner' || form.roleGroup === 'manager' || form.roleGroup === 'garden' || form.adminType === 'hotel_admin';
+    form.roleGroup === 'owner'
+    || form.roleGroup === 'manager'
+    || form.roleGroup === 'garden'
+    || (form.roleGroup === 'platform' && form.adminType === 'hotel_admin');
 
   const filteredProps = form.tenantId
     ? properties.filter(p => p.tenant_id === form.tenantId)
@@ -1412,7 +1421,6 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
 
   const getUserRoleDisplay = (u) => {
     if (u.role === 'platform_admin') return { label: ADMIN_TYPE_LABELS[u.admin_type] || 'Platform Admin', color: 'bg-slate-100 text-slate-800' };
-    if (u.role === 'admin')    return { label: 'Administrador de grupo',  color: 'bg-emerald-100 text-emerald-700' };
     if (u.role === 'owner')    return { label: 'Propietario',  color: 'bg-violet-100 text-violet-700' };
     if (u.role === 'manager')  return { label: 'Gerente',      color: 'bg-blue-100 text-blue-700' };
     if (u.role === 'garden_admin')     return { label: 'Admin Jardín',     color: 'bg-emerald-50 text-emerald-700' };
@@ -1516,7 +1524,7 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white z-10">
               <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                {editId ? 'Editar Usuario' : 'Nuevo Usuario de Plataforma'}
+                {editId ? 'Editar Usuario' : 'Nuevo propietario o gerente'}
               </h2>
               <button onClick={() => setShowModal(false)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400"><X size={18} /></button>
             </div>
@@ -1547,10 +1555,21 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">Rol *</label>
                 <div className="flex flex-wrap gap-2">
-                  {[{ value: 'admin', label: 'Admin / Plataforma' }, { value: 'owner', label: 'Propietario' }, { value: 'manager', label: 'Gerente Hotel' }, { value: 'garden', label: 'Rol Jardín' }].map(r => (
+                  {(editId
+                    ? [
+                        { value: 'platform', label: 'Plataforma' },
+                        { value: 'owner', label: 'Propietario' },
+                        { value: 'manager', label: 'Gerente Hotel' },
+                        { value: 'garden', label: 'Rol Jardín' },
+                      ]
+                    : [
+                        { value: 'owner', label: 'Propietario' },
+                        { value: 'manager', label: 'Gerente' },
+                      ]
+                  ).map(r => (
                     <button key={r.value} type="button"
                       data-testid={`role-group-${r.value}`}
-                      onClick={() => { set('roleGroup', r.value); if (r.value !== 'admin') set('adminType', null); }}
+                      onClick={() => { set('roleGroup', r.value); if (r.value !== 'platform') set('adminType', null); }}
                       className={`flex-1 min-w-[120px] py-2 rounded-lg text-sm font-medium border transition-all ${form.roleGroup === r.value ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'}`}>
                       {r.label}
                     </button>
@@ -1559,7 +1578,7 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
               </div>
 
               {/* Admin type */}
-              {form.roleGroup === 'admin' && (
+              {form.roleGroup === 'platform' && (
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1.5">Tipo de Admin</label>
                   <div className="flex flex-wrap gap-2">
@@ -1675,15 +1694,7 @@ function PlatformUsersTab({ users, tenants, properties, onRefresh }) {
                             return ['corporate', 'hotels', 'event-gardens', 'reports'].includes(key);
                           }
                           if (role === 'manager') {
-                            // Manager: solo módulos coherentes con su rol
-                            return [
-                              'dashboard', 'reservations', 'rooms', 'guests',
-                              'jardines', 'inbox', 'tasks', 'catalog',
-                              'reports', 'staff', 'room-types',
-                            ].includes(key);
-                          }
-                          if (role === 'admin') {
-                            // Admin: puede ajustar todos los módulos aplicables excepto el módulo de plataforma
+                            // Gerente operativo de grupo (sin módulo de plataforma)
                             return key !== 'platform_admin';
                           }
                           return false;

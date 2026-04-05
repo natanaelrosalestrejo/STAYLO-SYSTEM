@@ -54,7 +54,7 @@ const RoomCard = ({ rt, isAdmin, onEdit }) => {
             {rt.name}
           </span>
         </div>
-        {/* Edit button for admin/manager */}
+        {/* Edit button for manager */}
         {isAdmin && (
           <button onClick={onEdit}
             data-testid={`catalog-edit-${rt.id}`}
@@ -138,7 +138,7 @@ export default function RoomsCatalog() {
   const [roomTypes, setRoomTypes] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const isAdmin = user && ['admin', 'manager'].includes(user.role);
+  const isAdmin = user && user.role === 'manager';
 
   useEffect(() => {
     const fetchRoomTypes = async () => {

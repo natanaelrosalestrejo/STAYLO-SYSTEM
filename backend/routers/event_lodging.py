@@ -84,7 +84,7 @@ async def setup_event_lodging(
     event_id: str,
     data: EventLodgingSetupRequest,
     _: UserModel = Depends(require_any_module("jardines", "garden_lodging_integration")),
-    current_user: UserModel = Depends(require_role("platform_admin", "admin", "receptionist", "manager")),
+    current_user: UserModel = Depends(require_role("platform_admin", "manager", "receptionist")),
 ):
     event_doc = await db.event_bookings.find_one({"id": event_id}, {"_id": 0})
     if not event_doc:
@@ -204,7 +204,7 @@ async def update_event_lodging_assignment(
     assignment_id: str,
     data: dict,
     _: UserModel = Depends(require_any_module("jardines", "garden_lodging_integration")),
-    current_user: UserModel = Depends(require_role("platform_admin", "admin", "receptionist", "manager")),
+    current_user: UserModel = Depends(require_role("platform_admin", "manager", "receptionist")),
 ):
     doc = await db.event_lodging_assignments.find_one({"id": assignment_id}, {"_id": 0})
     if not doc:
@@ -248,7 +248,7 @@ async def update_event_lodging_assignment(
 async def delete_event_lodging_assignment(
     assignment_id: str,
     _: UserModel = Depends(require_any_module("jardines", "garden_lodging_integration")),
-    current_user: UserModel = Depends(require_role("platform_admin", "admin", "receptionist", "manager")),
+    current_user: UserModel = Depends(require_role("platform_admin", "manager", "receptionist")),
 ):
     doc = await db.event_lodging_assignments.find_one({"id": assignment_id}, {"_id": 0})
     if not doc:

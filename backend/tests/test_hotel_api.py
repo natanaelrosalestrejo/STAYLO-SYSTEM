@@ -18,8 +18,8 @@ class TestAuth:
         assert r.status_code == 200
         data = r.json()
         assert "access_token" in data
-        assert data["user"]["role"] == "admin"
-        print("PASS: Admin login OK")
+        assert data["user"]["role"] == "manager"
+        print("PASS: Manager (demo admin@hotel.com) login OK")
 
     def test_receptionist_login(self):
         r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "maria@hotel.com", "password": "recep123"})
@@ -43,7 +43,7 @@ class TestAuth:
     def test_auth_me(self, admin_token):
         r = requests.get(f"{BASE_URL}/api/auth/me", headers={"Authorization": f"Bearer {admin_token}"})
         assert r.status_code == 200
-        assert r.json()["role"] == "admin"
+        assert r.json()["role"] == "manager"
         print("PASS: /auth/me returns user info")
 
 
@@ -211,7 +211,7 @@ class TestStaff:
         assert r2.status_code == 403
         # Cleanup
         requests.delete(f"{BASE_URL}/api/users/{user['id']}", headers=headers)
-        print("PASS: Only admin can create users")
+        print("PASS: Only manager (demo) can create staff; receptionist cannot")
 
 
 # ====================== FIXTURES ======================
@@ -220,7 +220,7 @@ class TestStaff:
 def admin_token():
     r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@hotel.com", "password": "admin123"})
     if r.status_code != 200:
-        pytest.skip("Admin login failed")
+        pytest.skip("Manager demo login failed")
     return r.json()["access_token"]
 
 @pytest.fixture(scope="module")

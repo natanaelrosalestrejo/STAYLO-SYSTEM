@@ -23,25 +23,25 @@ const navItems = [
   { to: '/platform-admin/usuarios',      icon: Users,           label: 'Usuarios',     roles: ['platform_admin'] },
   { to: '/platform-admin/facturacion',   icon: CreditCard,      label: 'Facturación',  roles: ['platform_admin'] },
   // Owner strategic nav (lenguaje corporativo / cartera)
-  { to: '/corporate', icon: Globe2, label: 'Visión corporativa', roles: ['admin', 'owner'] },
-  { to: '/hotels', icon: Building2, label: 'Cartera de hoteles', roles: ['owner', 'admin'] },
-  { to: '/event-gardens', icon: Sparkles, label: 'Portafolio de jardines', roles: ['owner', 'admin'] },
+  { to: '/corporate', icon: Globe2, label: 'Visión corporativa', roles: ['owner', 'manager'] },
+  { to: '/hotels', icon: Building2, label: 'Cartera de hoteles', roles: ['owner', 'manager'] },
+  { to: '/event-gardens', icon: Sparkles, label: 'Portafolio de jardines', roles: ['owner', 'manager'] },
   // Operación diaria (finance no usa / — home en /reports)
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', labelOwner: 'Panel operativo', labelManager: 'Panel operativo', roles: ['admin', 'receptionist', 'manager', 'owner'] },
-  { to: '/reservations', icon: CalendarCheck, label: 'Reservas', roles: ['admin', 'receptionist', 'manager', 'owner'] },
-  { to: '/rooms', icon: BedDouble, label: 'Habitaciones', roles: ['admin', 'receptionist', 'manager', 'owner'] },
-  { to: '/guests', icon: Users, label: 'Huéspedes', roles: ['admin', 'receptionist', 'manager', 'owner'] },
-  { to: '/jardines', icon: Sparkles, label: 'Eventos en jardines', roles: ['admin', 'manager', 'owner'] },
-  { to: '/hotel-events', icon: CalendarDays, label: 'Eventos Hotel', roles: ['admin', 'manager', 'owner'] },
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', labelOwner: 'Panel operativo', labelManager: 'Panel operativo', roles: ['receptionist', 'sales', 'manager', 'owner'] },
+  { to: '/reservations', icon: CalendarCheck, label: 'Reservas', roles: ['receptionist', 'sales', 'manager', 'owner'] },
+  { to: '/rooms', icon: BedDouble, label: 'Habitaciones', roles: ['receptionist', 'sales', 'manager', 'owner'] },
+  { to: '/guests', icon: Users, label: 'Huéspedes', roles: ['receptionist', 'sales', 'manager', 'owner'] },
+  { to: '/jardines', icon: Sparkles, label: 'Eventos en jardines', roles: ['manager', 'owner'] },
+  { to: '/hotel-events', icon: CalendarDays, label: 'Eventos Hotel', roles: ['sales', 'manager', 'owner'] },
   // Shared modules
-  { to: '/inbox', icon: Inbox, label: 'Inbox', roles: ['admin', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },
-  { to: '/tasks', icon: CheckSquare, label: 'Tareas', roles: ['admin', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },
-  { to: '/catalogo', icon: BookOpen, label: 'Catálogo', roles: ['admin', 'receptionist', 'manager'] },
-  { to: '/reports', icon: BarChart3, label: 'Reportes', labelFinance: 'Centro financiero', roles: ['admin', 'owner', 'manager', 'finance'] },
+  { to: '/inbox', icon: Inbox, label: 'Inbox', roles: ['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },
+  { to: '/tasks', icon: CheckSquare, label: 'Tareas', roles: ['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },
+  { to: '/catalogo', icon: BookOpen, label: 'Catálogo', roles: ['receptionist', 'sales', 'manager'] },
+  { to: '/reports', icon: BarChart3, label: 'Reportes', labelFinance: 'Centro financiero', roles: ['owner', 'manager', 'finance'] },
   // Management
-  { to: '/staff', icon: UserCog, label: 'Personal', roles: ['admin', 'manager'] },
-  { to: '/room-types', icon: Cpu, label: 'Tipos de Hab.', roles: ['admin', 'manager'] },
-  { to: '/properties', icon: Settings, label: 'Propiedades', roles: ['admin'] },
+  { to: '/staff', icon: UserCog, label: 'Personal', roles: ['manager'] },
+  { to: '/room-types', icon: Cpu, label: 'Tipos de Hab.', roles: ['manager'] },
+  { to: '/properties', icon: Settings, label: 'Propiedades', roles: ['manager'] },
 ];
 
 const ADMIN_TYPE_LABELS = {
@@ -57,9 +57,9 @@ const getRoleLabel = (user) => {
     return ADMIN_TYPE_LABELS[user.admin_type] || 'Platform Admin';
   }
   const labels = {
-    admin: 'Administrador de grupo',
-    manager: 'Gerente',
+    manager: 'Gerente de operaciones',
     receptionist: 'Staff — Recepción',
+    sales: 'Staff — Ventas',
     housekeeping: 'Staff — Limpieza',
     maintenance: 'Staff — Mantenimiento',
     security: 'Staff — Seguridad',
@@ -189,8 +189,9 @@ export default function Layout({ children }) {
     };
   }, [filtered, user?.role, shellContext]);
 
-  const navForAdmin = useMemo(() => {
-    if (user?.role !== 'admin' || !shellContext) return null;
+  /** Group / hotel / garden shell for operational manager. */
+  const navForGroupManager = useMemo(() => {
+    if (user?.role !== 'manager' || !shellContext) return null;
     const byTo = (to) => filtered.find((i) => i.to === to);
     const asItems = (paths) =>
       paths.map(byTo).filter(Boolean).map((item) => ({ kind: 'item', item }));
@@ -253,17 +254,6 @@ export default function Layout({ children }) {
     };
   }, [user?.role, shellContext, filtered]);
 
-  /** Gerente: agrupa operación vs finanzas ( /reports solo si hay permiso de módulo). */
-  const navForManager = useMemo(() => {
-    if (user?.role !== 'manager') return null;
-    const reportsItem = filtered.find((i) => i.to === '/reports');
-    const rest = filtered.filter((i) => i.to !== '/reports');
-    const sections = [];
-    if (rest.length) sections.push({ label: 'Operación', items: rest });
-    if (reportsItem) sections.push({ label: 'Finanzas', items: [reportsItem] });
-    return sections.length ? { sections } : null;
-  }, [filtered, user?.role]);
-
   const navLabel = (item) => {
     if (user?.role === 'finance' && item.labelFinance) return item.labelFinance;
     if (user?.role === 'manager' && item.labelManager) return item.labelManager;
@@ -279,7 +269,7 @@ export default function Layout({ children }) {
       if (item.to === '/reports' && shellContext.mode === 'garden') return 'Reportes del jardín';
       return base;
     }
-    if (user?.role !== 'admin' || !shellContext) return base;
+    if (user?.role !== 'manager' || !shellContext) return base;
     const m = shellContext.mode;
     if (m === 'group' && item.to === '/corporate') return 'Dashboard del grupo';
     if (m === 'group' && item.to === '/hotels') return 'Hoteles';
@@ -310,7 +300,7 @@ export default function Layout({ children }) {
     selectProperty(id);
     setPropDropdown(false);
     if (id === 'all') {
-      if (user?.role === 'owner' || user?.role === 'admin') navigate('/corporate');
+      if (user?.role === 'owner' || user?.role === 'manager') navigate('/corporate');
       return;
     }
     if (user?.role === 'owner') {
@@ -319,7 +309,7 @@ export default function Layout({ children }) {
       else if (p?.type === 'event_garden') navigate(`/owner/garden/${id}`);
       return;
     }
-    if (user?.role === 'admin') {
+    if (user?.role === 'manager') {
       const p = properties.find((x) => x.id === id);
       if (p?.type === 'hotel') navigate('/');
       else if (p?.type === 'event_garden') navigate(`/jardines?propertyId=${encodeURIComponent(id)}`);
@@ -328,7 +318,7 @@ export default function Layout({ children }) {
 
   const pathForNavItem = (item) => {
     if (
-      (user?.role === 'owner' || user?.role === 'admin') &&
+      (user?.role === 'owner' || user?.role === 'manager') &&
       shellContext?.mode === 'garden' &&
       item.to === '/jardines' &&
       shellContext.focusPropertyId
@@ -442,20 +432,20 @@ export default function Layout({ children }) {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {user?.role === 'admin' && navForAdmin ? (
+        {user?.role === 'manager' && navForGroupManager ? (
           <>
             <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#a89888' }}>
-              {navForAdmin.primaryLabel}
+              {navForGroupManager.primaryLabel}
             </p>
-            {navForAdmin.primary.map((entry) =>
+            {navForGroupManager.primary.map((entry) =>
               entry.kind === 'extra' ? renderAdminExtraLink(entry) : renderNavLink(entry.item)
             )}
-            {navForAdmin.secondary.length > 0 && navForAdmin.secondaryLabel && (
+            {navForGroupManager.secondary.length > 0 && navForGroupManager.secondaryLabel && (
               <>
                 <p className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#a89888' }}>
-                  {navForAdmin.secondaryLabel}
+                  {navForGroupManager.secondaryLabel}
                 </p>
-                {navForAdmin.secondary.map(renderNavLink)}
+                {navForGroupManager.secondary.map(renderNavLink)}
               </>
             )}
           </>
@@ -473,19 +463,6 @@ export default function Layout({ children }) {
                 {navForOwner.secondary.map(renderNavLink)}
               </>
             )}
-          </>
-        ) : user?.role === 'manager' && navForManager ? (
-          <>
-            {navForManager.sections.map((sec) => (
-              <div key={sec.label}>
-                {navForManager.sections.length > 1 && (
-                  <p className="px-3 pt-1 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#a89888' }}>
-                    {sec.label}
-                  </p>
-                )}
-                {sec.items.map(renderNavLink)}
-              </div>
-            ))}
           </>
         ) : (
           filtered.map(renderNavLink)
@@ -544,7 +521,7 @@ export default function Layout({ children }) {
           </button>
           <div className="hidden md:block" />
           <div className="flex items-center gap-3">
-            {/* Property selector (admin + owner): owner navigates to context-aligned routes */}
+            {/* Property selector (manager de grupo + owner): owner navega a rutas alineadas al contexto */}
             {shouldShowPropertySelector(user, properties.length) && (
               <div className="relative" ref={dropRef}>
                 <button
@@ -558,7 +535,7 @@ export default function Layout({ children }) {
                   <span className="hidden sm:inline max-w-[160px] truncate">
                     {selectedProperty
                       ? selectedProperty.name
-                      : isAssignedPropertyScopedRole(user?.role) || !['owner', 'admin'].includes(user?.role || '')
+                      : isAssignedPropertyScopedRole(user?.role) || !['owner', 'manager'].includes(user?.role || '')
                         ? `Todas (${properties.length})`
                         : 'Todas las propiedades'}
                   </span>
@@ -566,14 +543,14 @@ export default function Layout({ children }) {
                 </button>
                 {propDropdown && (
                   <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-50 min-w-[220px] py-1">
-                    {(user?.role === 'owner' || user?.role === 'admin' || properties.length > 1) && (
+                    {(user?.role === 'owner' || user?.role === 'manager' || properties.length > 1) && (
                     <button
                       data-testid="prop-option-all"
                       onClick={() => applyPropertySelection('all')}
                       className={`w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 transition-colors flex items-center gap-2 ${selectedPropertyId === 'all' ? 'font-semibold' : ''}`}
                       style={{ color: '#625746' }}>
                       <Globe2 size={14} strokeWidth={1.5} />
-                      {user?.role === 'owner' || user?.role === 'admin'
+                      {user?.role === 'owner' || user?.role === 'manager'
                         ? 'Todas las propiedades (grupo)'
                         : `Todas mis propiedades (${properties.length})`}
                     </button>

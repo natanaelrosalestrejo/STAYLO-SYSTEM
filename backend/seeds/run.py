@@ -51,7 +51,7 @@ async def seed_data():
             name="Admin Hotel",
             email="admin@hotel.com",
             password_hash=hash_password("admin123"),
-            role="admin",
+            role="manager",
             department="Administración",
             avatar_color="#059669",
             property_id=None,
@@ -282,15 +282,15 @@ async def seed_data():
     await db.rooms.update_one({"id": rooms[4].id}, {"$set": {"status": "cleaning"}})
     await db.rooms.update_one({"id": rooms[6].id}, {"$set": {"status": "reserved"}})
 
-    admin = users[0]
+    ops_lead = users[0]
     tasks = [
         TaskModel(
             title="Limpiar habitación 305",
             description="Limpieza profunda post check-out",
             assigned_to=users[2].id,
             assigned_to_name=users[2].name,
-            assigned_by=admin.id,
-            assigned_by_name=admin.name,
+            assigned_by=ops_lead.id,
+            assigned_by_name=ops_lead.name,
             room_id=rooms[14].id,
             room_number="305",
             priority="high",
@@ -302,8 +302,8 @@ async def seed_data():
             description="Huésped reportó problemas con el aire acondicionado",
             assigned_to=users[3].id,
             assigned_to_name=users[3].name,
-            assigned_by=admin.id,
-            assigned_by_name=admin.name,
+            assigned_by=ops_lead.id,
+            assigned_by_name=ops_lead.name,
             room_id=rooms[8].id,
             room_number="204",
             priority="urgent",
@@ -315,8 +315,8 @@ async def seed_data():
             description="Bouquet de flores y champagne para Sophie Martin",
             assigned_to=users[1].id,
             assigned_to_name=users[1].name,
-            assigned_by=admin.id,
-            assigned_by_name=admin.name,
+            assigned_by=ops_lead.id,
+            assigned_by_name=ops_lead.name,
             room_id=rooms[3].id,
             room_number="104",
             priority="high",
@@ -335,8 +335,8 @@ async def seed_data():
             thread_id=thread1,
             sender_id=users[1].id,
             sender_name=users[1].name,
-            receiver_id=admin.id,
-            receiver_name=admin.name,
+            receiver_id=ops_lead.id,
+            receiver_name=ops_lead.name,
             subject="Solicitud upgrade suite 104",
             content="Hola, el huésped Sophie Martin llega mañana a la suite 104. ¿Podemos prepararle una bienvenida especial con champagne y flores?",
             message_type="staff_to_staff",
@@ -345,16 +345,16 @@ async def seed_data():
             thread_id=thread2,
             sender_id=users[2].id,
             sender_name=users[2].name,
-            receiver_id=admin.id,
-            receiver_name=admin.name,
+            receiver_id=ops_lead.id,
+            receiver_name=ops_lead.name,
             subject="Habitaciones listas",
             content="Las habitaciones 101, 103 y 205 ya están limpias y listas para recibir huéspedes. Continúo con la 305.",
             message_type="staff_to_staff",
         ),
         MessageModel(
             thread_id=thread3,
-            sender_id=admin.id,
-            sender_name=admin.name,
+            sender_id=ops_lead.id,
+            sender_name=ops_lead.name,
             receiver_id=guests[0].id,
             receiver_name="Juan Pérez",
             subject="Bienvenido al Hotel",
@@ -630,9 +630,9 @@ async def _backfill_user_tenant_ids():
     if not tid:
         return
     hotel_roles = [
-        "admin",
         "owner",
         "receptionist",
+        "sales",
         "manager",
         "finance",
         "housekeeping",
@@ -746,8 +746,8 @@ async def seed_demo_housekeeping_if_missing():
 async def _backfill_demo_scope():
     """One-time backfill: assign DEMO_PROPERTY_ID to existing users/rooms that have none (e.g. DBs seeded before scope was added)."""
     hotel_roles = [
-        "admin",
         "receptionist",
+        "sales",
         "manager",
         "finance",
         "housekeeping",

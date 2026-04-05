@@ -114,7 +114,7 @@ export default function Dashboard() {
   const canLoadReportsDashboard = hasDashboard && routeSatisfiedByModules(mods, 'reports');
   /** Recepción: sin módulo reports el backend rechaza /reports/dashboard; derivar KPIs de rooms + reservations (+ tasks). */
   const useReceptionistOperationalFallback =
-    user?.role === 'receptionist' && hasDashboard && hasRooms && hasReservations && !canLoadReportsDashboard;
+    ['receptionist', 'sales'].includes(user?.role) && hasDashboard && hasRooms && hasReservations && !canLoadReportsDashboard;
 
   useEffect(() => {
     if (user?.role === 'finance') return;
@@ -164,7 +164,7 @@ export default function Dashboard() {
     return null;
   })();
   const showOperationalKpis = hasHotelMetrics;
-  /** Solo gerente + permiso de finanzas por propiedad; owner/admin no ven resumen financiero aquí (corporate/reportes). */
+  /** Solo gerente + permiso de finanzas por propiedad; owner no ve resumen financiero aquí (corporate/reportes). */
   const showManagerFinancialSummary = isManager && hasManagerFinancialView && hasHotelMetrics;
   const showKpiRow =
     showOperationalKpis ||

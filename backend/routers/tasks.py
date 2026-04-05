@@ -14,7 +14,7 @@ router = APIRouter()
 
 @router.get("/tasks")
 async def get_tasks(current_user: UserModel = Depends(require_module("tasks"))):
-    if current_user.role in ["admin", "receptionist", "manager"]:
+    if current_user.role in ["receptionist", "manager"]:
         return await db.tasks.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return await db.tasks.find(
         {"$or": [{"assigned_to": current_user.id}, {"assigned_by": current_user.id}]},

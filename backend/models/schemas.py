@@ -332,7 +332,7 @@ class EventBookingModel(BaseModel):
     reservation_source: str = "reception"
     lodging_integration_enabled: bool = False
     lodging_summary: dict = {}
-    created_by: str = "admin"
+    created_by: str = "manager"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -360,7 +360,7 @@ class EventRoomBlockModel(BaseModel):
     blocked_room_count: int = 0
     status: str = "active"  # active | released | cancelled
     notes: Optional[str] = None
-    created_by: str = "admin"
+    created_by: str = "manager"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -378,7 +378,7 @@ class EventLodgingAssignmentModel(BaseModel):
     check_out_date: Optional[str] = None
     reservation_id: Optional[str] = None
     notes: Optional[str] = None
-    created_by: str = "admin"
+    created_by: str = "manager"
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -479,25 +479,28 @@ class AmenityCreate(BaseModel):
     icon: Optional[str] = None
 
 
+# Manager = primary hotel/group operational role (absorbs former business "admin").
+_MANAGER_DEFAULT_MODULES = [
+    "corporate",
+    "hotels",
+    "event-gardens",
+    "dashboard",
+    "reservations",
+    "rooms",
+    "guests",
+    "jardines",
+    "hotel-events",
+    "inbox",
+    "tasks",
+    "catalog",
+    "reports",
+    "staff",
+    "properties",
+    "room-types",
+]
+
 DEFAULT_ROLE_PERMISSIONS = {
     "platform_admin": ["platform_admin"],
-    "admin": [
-        "corporate",
-        "hotels",
-        "event-gardens",
-        "dashboard",
-        "reservations",
-        "rooms",
-        "guests",
-        "jardines",
-        "hotel-events",
-        "inbox",
-        "tasks",
-        "catalog",
-        "reports",
-        "staff",
-        "properties",
-    ],
     "owner": [
         "corporate",
         "hotels",
@@ -511,9 +514,19 @@ DEFAULT_ROLE_PERMISSIONS = {
         "hotel-events",
         "catalog",
     ],
-    "manager": ["dashboard", "reservations", "rooms", "guests", "jardines", "hotel-events", "inbox", "tasks", "catalog", "staff", "room-types"],
+    "manager": list(_MANAGER_DEFAULT_MODULES),
     "finance": ["reports", "dashboard"],
     "receptionist": ["dashboard", "reservations", "rooms", "guests", "inbox", "tasks", "catalog"],
+    "sales": [
+        "dashboard",
+        "reservations",
+        "rooms",
+        "guests",
+        "inbox",
+        "tasks",
+        "catalog",
+        "hotel-events",
+    ],
     "housekeeping": ["inbox", "tasks"],
     "maintenance": ["inbox", "tasks"],
     "security": ["inbox", "tasks"],

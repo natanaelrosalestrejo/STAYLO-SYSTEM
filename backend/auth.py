@@ -153,14 +153,15 @@ def assigned_property_ids_for_user(user: UserModel) -> List[str]:
 async def _allowed_property_ids(current_user: UserModel):
     """Return None for global visibility (platform_admin), else list of property ids the user may access.
 
-    manager/finance: only assigned_property_ids_for_user (never implicit tenant-wide).
+    finance: only assigned_property_ids_for_user (never implicit tenant-wide).
+    manager: same as former group admin — assigned if set, else all properties in tenant when tenant_id is set.
     Other roles: assigned list if set; otherwise all properties in tenant when tenant_id is set.
     """
     if current_user.role == PLATFORM_ADMIN_ROLE:
         return None
+    if current_user.role == "finance":
+        return assigned_property_ids_for_user(current_user)
     assigned = assigned_property_ids_for_user(current_user)
-    if current_user.role in ("manager", "finance"):
-        return assigned
     if assigned:
         return assigned
     if current_user.tenant_id:
@@ -173,12 +174,12 @@ async def allowed_property_ids_for_reports(current_user: UserModel) -> Optional[
     """Property scope for /reports/* (financial + operational KPIs).
 
     - platform_admin → None (unfiltered; entire DB — platform tooling only).
-    - manager / finance → assigned_property_ids_for_user only (may be multiple properties).
-    - Other roles → same as _allowed_property_ids.
+    - finance → assigned_property_ids_for_user only.
+    - manager (and other business roles) → same as _allowed_property_ids.
     """
     if current_user.role == PLATFORM_ADMIN_ROLE:
         return None
-    if current_user.role in ("manager", "finance"):
+    if current_user.role == "finance":
         return assigned_property_ids_for_user(current_user)
     return await _allowed_property_ids(current_user)
 

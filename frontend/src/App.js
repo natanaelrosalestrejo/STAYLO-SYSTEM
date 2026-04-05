@@ -89,24 +89,24 @@ function AppRoutes() {
       <Route path="/login" element={<LoginRoute />} />
       <Route path="/platform-admin" element={<ProtectedRoute allowedRoles={['platform_admin']}><PlatformAdmin /></ProtectedRoute>} />
       <Route path="/platform-admin/:section" element={<ProtectedRoute allowedRoles={['platform_admin']}><PlatformAdmin /></ProtectedRoute>} />
-      <Route path="/corporate" element={<ProtectedRoute allowedRoles={['admin','owner']}><CorporateDashboard /></ProtectedRoute>} />
-      <Route path="/hotels" element={<ProtectedRoute allowedRoles={['admin','owner']}><HotelsOverview /></ProtectedRoute>} />
-      <Route path="/event-gardens" element={<ProtectedRoute allowedRoles={['admin','owner']}><EventGardensOverview /></ProtectedRoute>} />
+      <Route path="/corporate" element={<ProtectedRoute allowedRoles={['manager','owner']}><CorporateDashboard /></ProtectedRoute>} />
+      <Route path="/hotels" element={<ProtectedRoute allowedRoles={['manager','owner']}><HotelsOverview /></ProtectedRoute>} />
+      <Route path="/event-gardens" element={<ProtectedRoute allowedRoles={['manager','owner']}><EventGardensOverview /></ProtectedRoute>} />
       <Route path="/owner/hotel/:propertyId" element={<ProtectedRoute allowedRoles={['owner']}><OwnerHotelSummary /></ProtectedRoute>} />
       <Route path="/owner/garden/:propertyId" element={<ProtectedRoute allowedRoles={['owner']}><OwnerGardenSummary /></ProtectedRoute>} />
-      <Route path="/" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Dashboard /></ProtectedRoute>} />
-      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Reservations /></ProtectedRoute>} />
-      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Rooms /></ProtectedRoute>} />
-      <Route path="/guests" element={<ProtectedRoute allowedRoles={['admin','receptionist','manager','owner']}><Guests /></ProtectedRoute>} />
-      <Route path="/jardines" element={<ProtectedRoute allowedRoles={['admin','manager','owner']}><EventGarden /></ProtectedRoute>} />
-      <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['admin','manager','owner']}><HotelEvents /></ProtectedRoute>} />
-      <Route path="/room-types" element={<ProtectedRoute allowedRoles={['admin','manager']}><RoomTypes /></ProtectedRoute>} />
+      <Route path="/" element={<ProtectedRoute allowedRoles={['receptionist','sales','manager','owner']}><Dashboard /></ProtectedRoute>} />
+      <Route path="/reservations" element={<ProtectedRoute allowedRoles={['receptionist','sales','manager','owner']}><Reservations /></ProtectedRoute>} />
+      <Route path="/rooms" element={<ProtectedRoute allowedRoles={['receptionist','sales','manager','owner']}><Rooms /></ProtectedRoute>} />
+      <Route path="/guests" element={<ProtectedRoute allowedRoles={['receptionist','sales','manager','owner']}><Guests /></ProtectedRoute>} />
+      <Route path="/jardines" element={<ProtectedRoute allowedRoles={['manager','owner']}><EventGarden /></ProtectedRoute>} />
+      <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['sales','manager','owner']}><HotelEvents /></ProtectedRoute>} />
+      <Route path="/room-types" element={<ProtectedRoute allowedRoles={['manager']}><RoomTypes /></ProtectedRoute>} />
       <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-      <Route path="/reports" element={<ProtectedRoute allowedRoles={['admin','owner','manager','finance']}><Reports /></ProtectedRoute>} />
-      <Route path="/staff" element={<ProtectedRoute allowedRoles={['admin','platform_admin','manager']}><Staff /></ProtectedRoute>} />
-      <Route path="/properties" element={<ProtectedRoute allowedRoles={['admin']}><PropertyManagement /></ProtectedRoute>} />
-      <Route path="/catalogo" element={<ProtectedRoute allowedRoles={['admin', 'receptionist', 'manager', 'owner']}><RoomsCatalog /></ProtectedRoute>} />
+      <Route path="/reports" element={<ProtectedRoute allowedRoles={['owner','manager','finance']}><Reports /></ProtectedRoute>} />
+      <Route path="/staff" element={<ProtectedRoute allowedRoles={['platform_admin','manager']}><Staff /></ProtectedRoute>} />
+      <Route path="/properties" element={<ProtectedRoute allowedRoles={['manager']}><PropertyManagement /></ProtectedRoute>} />
+      <Route path="/catalogo" element={<ProtectedRoute allowedRoles={['receptionist', 'sales', 'manager', 'owner']}><RoomsCatalog /></ProtectedRoute>} />
       <Route path="/reservar" element={<BookingWizard />} />
       <Route path="/mi-reserva" element={<BookingLookup />} />
       <Route path="*" element={<Navigate to={defaultPath} replace />} />

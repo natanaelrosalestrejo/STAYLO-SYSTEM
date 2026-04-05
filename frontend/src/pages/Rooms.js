@@ -40,7 +40,7 @@ const RoomCard = ({ room, onStatusClick, onEditClick, canManage }) => (
 export default function Rooms() {
   const { user } = useAuth();
   const { selectedPropertyId, properties } = useProperty();
-  const canManage = ['admin', 'platform_admin'].includes(user?.role);
+  const canManage = ['manager', 'platform_admin'].includes(user?.role);
   const [rooms, setRooms] = useState([]);
   const [statusFilter, setStatusFilter] = useState('all');
   const [floorFilter, setFloorFilter] = useState('all');
@@ -69,7 +69,7 @@ export default function Rooms() {
         const p = properties.find((x) => x.id === only);
         if (p?.type === 'hotel') return only;
       }
-      if (user?.property_id && ['receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(user?.role)) {
+      if (user?.property_id && ['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(user?.role)) {
         return user.property_id;
       }
       return null;

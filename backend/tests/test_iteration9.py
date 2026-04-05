@@ -72,7 +72,7 @@ class TestCustomPermissions:
                 "name": "TEST_CustomPerms",
                 "email": "test_cp_iter9@test.com",
                 "password": "test123",
-                "role": "admin",
+                "role": "manager",
                 "custom_permissions": ["dashboard", "reservations", "rooms"]
             },
             headers={"Authorization": f"Bearer {platform_token}"})
@@ -84,7 +84,7 @@ class TestCustomPermissions:
     def test_update_user_custom_permissions(self, platform_token):
         # Create user first
         r = requests.post(f"{BASE_URL}/api/users",
-            json={"name": "TEST_UpdateCP", "email": "test_updatecp_iter9@test.com", "password": "test123", "role": "admin"},
+            json={"name": "TEST_UpdateCP", "email": "test_updatecp_iter9@test.com", "password": "test123", "role": "manager"},
             headers={"Authorization": f"Bearer {platform_token}"})
         assert r.status_code == 200
         uid = r.json()["id"]
@@ -102,7 +102,7 @@ class TestCustomPermissions:
         # Create user with custom_permissions
         r = requests.post(f"{BASE_URL}/api/users",
             json={"name": "TEST_ResetCP", "email": "test_resetcp_iter9@test.com", "password": "test123",
-                  "role": "admin", "custom_permissions": ["dashboard"]},
+                  "role": "manager", "custom_permissions": ["dashboard"]},
             headers={"Authorization": f"Bearer {platform_token}"})
         assert r.status_code == 200
         uid = r.json()["id"]

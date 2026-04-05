@@ -44,7 +44,7 @@ class TestDefaultOnlyAndGlobalOverride:
     def test_global_override_replaces_default_list(self):
         override = ["dashboard", "reports", "bogus_unknown"]
         got = resolve_effective_modules_core(
-            role="admin",
+            role="manager",
             tenant_id="t1",
             custom_permissions=None,
             global_role_modules=override,
@@ -185,10 +185,10 @@ class TestCustomPermissions:
 class TestMissingTenantId:
     def test_empty_tenant_id_returns_empty(self):
         got = resolve_effective_modules_core(
-            role="admin",
+            role="manager",
             tenant_id="",
             custom_permissions=None,
-            global_role_modules=DEFAULT_ROLE_PERMISSIONS["admin"],
+            global_role_modules=DEFAULT_ROLE_PERMISSIONS["manager"],
             tenant_role_modules_replace=None,
             tenant_enabled_allowlist=None,
             platform_admin=False,
@@ -197,10 +197,10 @@ class TestMissingTenantId:
 
     def test_none_tenant_id_returns_empty(self):
         got = resolve_effective_modules_core(
-            role="admin",
+            role="manager",
             tenant_id=None,
             custom_permissions=None,
-            global_role_modules=DEFAULT_ROLE_PERMISSIONS["admin"],
+            global_role_modules=DEFAULT_ROLE_PERMISSIONS["manager"],
             tenant_role_modules_replace=None,
             tenant_enabled_allowlist=None,
             platform_admin=False,

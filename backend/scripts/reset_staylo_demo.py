@@ -218,7 +218,7 @@ def run_reset(*, dry_run: bool) -> None:
         name="Admin Hotel",
         email="admin@hotel.com",
         password_hash=hash_password("admin123"),
-        role="admin",
+        role="manager",
         department="Administración",
         avatar_color="#059669",
         property_id=None,

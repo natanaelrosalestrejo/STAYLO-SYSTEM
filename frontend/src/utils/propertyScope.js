@@ -44,7 +44,7 @@ export function getPinnedPropertyIdForShell(user) {
  */
 export function shouldShowPropertySelector(user, visiblePropertiesCount) {
   if (!user || visiblePropertiesCount <= 0) return false;
-  if (user.role === 'admin' || user.role === 'owner') return true;
+  if (user.role === 'manager' || user.role === 'owner') return true;
   if (isAssignedPropertyScopedRole(user.role)) return visiblePropertiesCount > 1;
   if (['receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(user.role)) {
     return visiblePropertiesCount > 1;

@@ -150,7 +150,7 @@ async def create_reservation(
 async def checkin(
     res_id: str,
     _: UserModel = Depends(require_module("reservations")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
@@ -163,7 +163,7 @@ async def checkin(
 async def checkout(
     res_id: str,
     _: UserModel = Depends(require_module("reservations")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
@@ -187,7 +187,7 @@ async def cancel_reservation(
 async def collect_payment(
     res_id: str,
     _: UserModel = Depends(require_module("reservations")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     res = await db.reservations.find_one({"id": res_id})
     if not res: raise HTTPException(status_code=404, detail="Reserva no encontrada")
@@ -419,7 +419,7 @@ async def revenue_insights(current_user: UserModel = Depends(require_module("rep
 @api_router.get("/reports/export/csv")
 async def export_reservations_csv(
     _: UserModel = Depends(require_module("reports")),
-    current_user: UserModel = Depends(require_role("admin", "owner", "manager", "receptionist")),
+    current_user: UserModel = Depends(require_role("owner", "manager", "receptionist")),
 ):
     """Finance role excluded (require_role). Rows filtered to report property scope when not platform_admin."""
     from fastapi.responses import StreamingResponse
@@ -549,7 +549,7 @@ async def list_properties(current_user: UserModel = Depends(get_current_user)):
 async def create_property(
     data: PropertyCreate,
     _: UserModel = Depends(require_module("properties")),
-    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
 ):
     prop = PropertyModel(**data.model_dump())
     await db.properties.insert_one(prop.model_dump())
@@ -560,7 +560,7 @@ async def update_property(
     prop_id: str,
     data: dict,
     _: UserModel = Depends(require_module("properties")),
-    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
 ):
     await db.properties.update_one({"id": prop_id}, {"$set": data})
     p = await db.properties.find_one({"id": prop_id}, {"_id": 0})
@@ -571,7 +571,7 @@ async def update_property(
 async def delete_property(
     prop_id: str,
     _: UserModel = Depends(require_module("properties")),
-    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
 ):
     active = await db.reservations.count_documents({"property_id": prop_id, "status": {"$in": ["confirmed", "checked_in"]}})
     if active > 0:
@@ -594,7 +594,7 @@ async def list_event_spaces(
 async def create_event_space(
     data: EventSpaceCreate,
     _: UserModel = Depends(require_module("jardines")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     space = EventSpaceModel(**data.model_dump())
     await db.event_spaces.insert_one(space.model_dump())
@@ -605,7 +605,7 @@ async def update_event_space(
     space_id: str,
     data: dict,
     _: UserModel = Depends(require_module("jardines")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     await db.event_spaces.update_one({"id": space_id}, {"$set": data})
     s = await db.event_spaces.find_one({"id": space_id}, {"_id": 0})
@@ -616,7 +616,7 @@ async def update_event_space(
 async def delete_event_space(
     space_id: str,
     _: UserModel = Depends(require_module("jardines")),
-    current_user: UserModel = Depends(require_role("admin")),
+    current_user: UserModel = Depends(require_role("manager")),
 ):
     await db.event_spaces.delete_one({"id": space_id})
     return {"deleted": True}
@@ -636,7 +636,7 @@ async def list_hotel_spaces(
 async def create_hotel_space(
     data: HotelSpaceCreate,
     _: UserModel = Depends(require_module("hotel-events")),
-    current_user: UserModel = Depends(require_role("admin", "manager")),
+    current_user: UserModel = Depends(require_role("manager")),
 ):
     space = HotelSpaceModel(**data.model_dump())
     await db.hotel_spaces.insert_one(space.model_dump())
@@ -647,7 +647,7 @@ async def update_hotel_space(
     space_id: str,
     data: dict,
     _: UserModel = Depends(require_module("hotel-events")),
-    current_user: UserModel = Depends(require_role("admin", "manager")),
+    current_user: UserModel = Depends(require_role("manager")),
 ):
     await db.hotel_spaces.update_one({"id": space_id}, {"$set": data})
     s = await db.hotel_spaces.find_one({"id": space_id}, {"_id": 0})
@@ -658,7 +658,7 @@ async def update_hotel_space(
 async def delete_hotel_space(
     space_id: str,
     _: UserModel = Depends(require_module("hotel-events")),
-    current_user: UserModel = Depends(require_role("admin", "manager")),
+    current_user: UserModel = Depends(require_role("manager")),
 ):
     await db.hotel_spaces.delete_one({"id": space_id})
     return {"deleted": True}
@@ -702,7 +702,7 @@ async def update_event_booking_status(
 async def delete_event_booking(
     booking_id: str,
     _: UserModel = Depends(require_any_module("jardines", "hotel-events")),
-    current_user: UserModel = Depends(require_role("admin", "receptionist")),
+    current_user: UserModel = Depends(require_role("manager", "receptionist")),
 ):
     await db.event_bookings.delete_one({"id": booking_id})
     return {"deleted": True}
@@ -732,7 +732,7 @@ async def _corporate_scope_property_ids(current_user: UserModel) -> list[str]:
 @api_router.get("/corporate/dashboard")
 async def corporate_dashboard(
     _: UserModel = Depends(require_module("corporate")),
-    current_user: UserModel = Depends(require_role("admin", "owner")),
+    current_user: UserModel = Depends(require_role("owner", "manager")),
 ):
     from datetime import date as dt_date, timedelta
     today = dt_date.today()
@@ -1103,7 +1103,7 @@ async def corporate_dashboard(
 @api_router.get("/properties/stats")
 async def properties_stats(
     _: UserModel = Depends(require_any_module("hotels", "event-gardens", "corporate")),
-    current_user: UserModel = Depends(require_role("admin", "owner")),
+    current_user: UserModel = Depends(require_role("owner", "manager")),
 ):
     """Per-property aggregated stats for HotelsOverview and EventGardensOverview (mismo alcance que /corporate/dashboard)."""
     from datetime import date as dt_date
@@ -1352,7 +1352,7 @@ async def create_public_booking(data: PublicBookingCreate):
                                email=data.email, phone=data.phone, id_number=data.id_number)
         await db.guests.insert_one(guest_obj.model_dump())
         guest = guest_obj.model_dump()
-    system_user = await db.users.find_one({"role": "admin"}, {"_id": 0})
+    system_user = await db.users.find_one({"role": "manager"}, {"_id": 0})
     created_by = system_user["id"] if system_user else "public"
     reservation = ReservationModel(
         guest_id=guest["id"], guest_name=f"{data.first_name} {data.last_name}",
@@ -1454,7 +1454,7 @@ async def get_checkout_status_public(session_id: str, request: Request):
             room = await find_available_room_of_type(pending["room_type"], pending["check_in_date"], pending["check_out_date"])
             if room:
                 await _ensure_hotel_room_inventory_for_booking(room)
-                system_user = await db.users.find_one({"role": "admin"}, {"_id": 0})
+                system_user = await db.users.find_one({"role": "manager"}, {"_id": 0})
                 created_by = system_user["id"] if system_user else "public"
                 guest = await db.guests.find_one({"email": pending["email"]}, {"_id": 0})
                 if not guest:
@@ -1512,7 +1512,7 @@ async def stripe_webhook(request: Request):
 
 # --- Tenants ---
 @api_router.get("/tenants")
-async def list_tenants(current_user: UserModel = Depends(require_role("platform_admin", "admin", "owner"))):
+async def list_tenants(current_user: UserModel = Depends(require_role("platform_admin", "manager", "owner"))):
     return await db.tenants.find({}, {"_id": 0}).to_list(100)
 
 @api_router.post("/tenants")
@@ -1529,7 +1529,7 @@ async def update_tenant(tenant_id: str, data: dict, current_user: UserModel = De
     return t
 
 @api_router.get("/tenants/{tenant_id}")
-async def get_tenant(tenant_id: str, current_user: UserModel = Depends(require_role("platform_admin", "admin", "owner"))):
+async def get_tenant(tenant_id: str, current_user: UserModel = Depends(require_role("platform_admin", "manager", "owner"))):
     t = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not t: raise HTTPException(status_code=404, detail="Tenant no encontrado")
     return t
@@ -1549,20 +1549,20 @@ async def list_room_types(current_user: UserModel = Depends(get_current_user)):
     return await db.room_types.find({}, {"_id": 0}).to_list(100)
 
 @api_router.post("/room-types")
-async def create_room_type(data: RoomTypeCreate, current_user: UserModel = Depends(require_role("platform_admin", "admin"))):
+async def create_room_type(data: RoomTypeCreate, current_user: UserModel = Depends(require_role("platform_admin", "manager"))):
     rt = RoomTypeModel(**data.model_dump())
     await db.room_types.insert_one(rt.model_dump())
     return rt.model_dump()
 
 @api_router.patch("/room-types/{rt_id}")
-async def update_room_type(rt_id: str, data: dict, current_user: UserModel = Depends(require_role("platform_admin", "admin"))):
+async def update_room_type(rt_id: str, data: dict, current_user: UserModel = Depends(require_role("platform_admin", "manager"))):
     await db.room_types.update_one({"id": rt_id}, {"$set": data})
     rt = await db.room_types.find_one({"id": rt_id}, {"_id": 0})
     if not rt: raise HTTPException(status_code=404, detail="Tipo de habitación no encontrado")
     return rt
 
 @api_router.delete("/room-types/{rt_id}")
-async def delete_room_type(rt_id: str, current_user: UserModel = Depends(require_role("platform_admin", "admin"))):
+async def delete_room_type(rt_id: str, current_user: UserModel = Depends(require_role("platform_admin", "manager"))):
     await db.room_types.delete_one({"id": rt_id})
     return {"deleted": True}
 
@@ -1572,7 +1572,7 @@ async def list_amenities(current_user: UserModel = Depends(get_current_user)):
     return await db.amenities.find({}, {"_id": 0}).to_list(200)
 
 @api_router.post("/amenities")
-async def create_amenity(data: AmenityCreate, current_user: UserModel = Depends(require_role("platform_admin", "admin"))):
+async def create_amenity(data: AmenityCreate, current_user: UserModel = Depends(require_role("platform_admin", "manager"))):
     a = AmenityModel(**data.model_dump())
     if await db.amenities.find_one({"id": a.id}):
         raise HTTPException(status_code=400, detail="Amenidad ya existe")
@@ -1586,7 +1586,7 @@ async def delete_amenity(amenity_id: str, current_user: UserModel = Depends(requ
 
 # --- Role Permissions ---
 @api_router.get("/role-permissions")
-async def get_all_role_permissions(current_user: UserModel = Depends(require_role("platform_admin", "admin"))):
+async def get_all_role_permissions(current_user: UserModel = Depends(require_role("platform_admin", "manager"))):
     perms = await db.role_permissions.find({}, {"_id": 0}).to_list(20)
     result = dict(DEFAULT_ROLE_PERMISSIONS)
     for p in perms:
@@ -1709,15 +1709,15 @@ async def onboard_property(data: dict, current_user: UserModel = Depends(require
             await db.users.insert_one(owner_user.model_dump())
             created_users.append({"role": "owner", "email": data["owner_email"], "temp_password": "owner123"})
 
-    # Create admin account
+    # Create manager account (onboarding contact for the property)
     if data.get("admin_email") and data.get("admin_name"):
         if not await db.users.find_one({"email": data["admin_email"]}):
-            admin_user = UserModel(
+            mgr_user = UserModel(
                 name=data["admin_name"], email=data["admin_email"],
-                password_hash=hash_password("admin123"), role="admin",
+                password_hash=hash_password("admin123"), role="manager",
                 department="Administración", avatar_color="#059669")
-            await db.users.insert_one(admin_user.model_dump())
-            created_users.append({"role": "admin", "email": data["admin_email"], "temp_password": "admin123"})
+            await db.users.insert_one(mgr_user.model_dump())
+            created_users.append({"role": "manager", "email": data["admin_email"], "temp_password": "admin123"})
 
     return {
         "success": True, "property_id": prop.id, "property_name": prop.name,
@@ -1743,7 +1743,7 @@ async def update_features(
     prop_id: str,
     features: dict,
     _: UserModel = Depends(require_module("properties")),
-    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
 ):
     await db.properties.update_one({"id": prop_id}, {"$set": {"feature_toggles": features}})
     return features

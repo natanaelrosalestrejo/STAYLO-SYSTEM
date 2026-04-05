@@ -53,7 +53,7 @@ class TestAuthLogins:
         r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@hotel.com", "password": "admin123"})
         assert r.status_code == 200
         data = r.json()
-        assert data["user"]["role"] == "admin"
+        assert data["user"]["role"] == "manager"
 
     def test_platform_user_has_no_admin_type(self):
         r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "platform@almasystem.com", "password": "platform123"})
@@ -124,7 +124,7 @@ class TestUserFieldsResponse:
         r = requests.get(f"{BASE_URL}/api/auth/me", headers=admin_headers)
         assert r.status_code == 200
         data = r.json()
-        assert data["role"] == "admin"
+        assert data["role"] == "manager"
 
 
 class TestManagerCanCreateStaff:

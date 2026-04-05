@@ -64,7 +64,7 @@ export default function HotelEvents() {
     return hotels[0];
   }, [properties, selectedPropertyId]);
 
-  const isAdmin = ['admin', 'manager'].includes(user?.role);
+  const isAdmin = user?.role === 'manager' || user?.role === 'sales';
 
   const fetchData = async () => {
     try {

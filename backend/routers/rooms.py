@@ -72,7 +72,7 @@ async def update_room_status(
 async def delete_room(
     room_id: str,
     _: UserModel = Depends(require_module("rooms")),
-    current_user: UserModel = Depends(require_role("admin", "platform_admin")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
 ):
     room = await db.rooms.find_one({"id": room_id}, {"_id": 0})
     if not room:

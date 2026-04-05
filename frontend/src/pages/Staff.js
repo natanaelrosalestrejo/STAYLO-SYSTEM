@@ -4,35 +4,44 @@ import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
 import { Plus, Edit2, UserX, UserCheck, X, Shield, ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 
+const STAFF_SUBTYPES = [
+  { value: 'receptionist', label: 'Recepción' },
+  { value: 'sales', label: 'Ventas' },
+  { value: 'housekeeping', label: 'Limpieza' },
+  { value: 'maintenance', label: 'Mantenimiento' },
+  { value: 'security', label: 'Seguridad' },
+  { value: 'restaurant', label: 'Restaurante' },
+];
+
 // ─── Role structure for hotel/property context ─────────────────
 const ROLE_GROUPS = [
   { group: 'manager', label: 'Gerente', subTypes: null },
   { group: 'finance', label: 'Finanzas', subTypes: null },
-  {
-    group: 'staff',
-    label: 'Staff',
-    subTypes: [
-      { value: 'receptionist', label: 'Recepción' },
-      { value: 'housekeeping', label: 'Limpieza' },
-      { value: 'maintenance',  label: 'Mantenimiento' },
-      { value: 'security',     label: 'Seguridad' },
-      { value: 'restaurant',   label: 'Restaurante' },
-    ],
-  },
+  { group: 'staff', label: 'Staff', subTypes: STAFF_SUBTYPES },
 ];
 
-// Roles that belong to hotel/property context (no platform_admin, no admin)
-const PROPERTY_STAFF_ROLES = ['manager', 'finance', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'];
+/** Solo staff operativo: el gerente crea únicamente estos roles (según API). */
+const ROLE_GROUPS_MANAGER = [
+  { group: 'staff', label: 'Staff', subTypes: STAFF_SUBTYPES },
+];
+
+// Roles visibles en la tabla de personal del hotel
+const PROPERTY_STAFF_ROLES = [
+  'manager', 'finance', 'receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant',
+];
 
 const ALL_ROLES = [
   { value: 'manager',      label: 'Gerente',               color: 'bg-emerald-100 text-emerald-700' },
   { value: 'finance',      label: 'Finanzas',              color: 'bg-cyan-100 text-cyan-800' },
   { value: 'receptionist', label: 'Staff — Recepción',     color: 'bg-blue-100 text-blue-700' },
+  { value: 'sales',        label: 'Staff — Ventas',        color: 'bg-indigo-100 text-indigo-800' },
   { value: 'housekeeping', label: 'Staff — Limpieza',      color: 'bg-amber-100 text-amber-700' },
   { value: 'maintenance',  label: 'Staff — Mantenimiento', color: 'bg-orange-100 text-orange-700' },
   { value: 'security',     label: 'Staff — Seguridad',     color: 'bg-red-100 text-red-600' },
   { value: 'restaurant',   label: 'Staff — Restaurante',   color: 'bg-pink-100 text-pink-700' },
 ];
+
+const MANAGER_MANAGEABLE_ROLES = new Set(['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant']);
 
 const ALL_MODULES = [
   { key: 'dashboard',     label: 'Dashboard' },
@@ -83,7 +92,11 @@ export default function Staff() {
   const [showCustomPerms, setShowCustomPerms] = useState(false);
   const [customPerms, setCustomPerms]   = useState([]);
 
-  const currentGroupCfg = ROLE_GROUPS.find(g => g.group === roleGroup);
+  const roleGroupsUi =
+    currentUser?.role === 'manager' && (!editing || editing.id !== currentUser?.id)
+      ? ROLE_GROUPS_MANAGER
+      : ROLE_GROUPS;
+  const currentGroupCfg = roleGroupsUi.find(g => g.group === roleGroup);
   const subTypes = currentGroupCfg?.subTypes || null;
 
   const fetchStaff = async () => {
@@ -95,8 +108,13 @@ export default function Staff() {
   const openCreate = () => {
     setEditing(null);
     setName(''); setEmail(''); setPassword('');
-    setRoleGroup('manager');
-    setRoleSubType('');
+    if (currentUser?.role === 'manager') {
+      setRoleGroup('staff');
+      setRoleSubType('receptionist');
+    } else {
+      setRoleGroup('manager');
+      setRoleSubType('');
+    }
     setIsActive(true);
     setShowCustomPerms(false); setCustomPerms([]);
     setShowModal(true);
@@ -116,7 +134,7 @@ export default function Staff() {
   };
 
   const handleGroupChange = (g) => {
-    const cfg = ROLE_GROUPS.find(x => x.group === g);
+    const cfg = roleGroupsUi.find(x => x.group === g);
     setRoleGroup(g);
     setRoleSubType(cfg?.subTypes?.[0]?.value || '');
     if (g !== 'manager') { setShowCustomPerms(false); setCustomPerms([]); }
@@ -166,11 +184,17 @@ export default function Staff() {
     if (!currentUser) return false;
     if (currentUser.id === targetUser.id) return false;
     if (currentUser.role === 'platform_admin') return true;
-    if (currentUser.role === 'admin') {
-      return ['manager', 'finance', 'receptionist', 'housekeeping', 'maintenance', 'security', 'restaurant'].includes(targetUser.role);
-    }
     if (currentUser.role === 'manager') {
-      return ['receptionist','housekeeping','maintenance','security','restaurant'].includes(targetUser.role);
+      return MANAGER_MANAGEABLE_ROLES.has(targetUser.role);
+    }
+    return false;
+  };
+
+  const canEditRow = (targetUser) => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'platform_admin') return true;
+    if (currentUser.role === 'manager') {
+      return targetUser.id === currentUser.id || MANAGER_MANAGEABLE_ROLES.has(targetUser.role);
     }
     return false;
   };
@@ -205,10 +229,12 @@ export default function Staff() {
           </h1>
           <p className="text-sm text-slate-500">{filteredByRole.length} empleado(s) registrado(s)</p>
         </div>
+        {currentUser?.role === 'manager' && (
         <button data-testid="new-staff-btn" onClick={openCreate}
           className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition-all active:scale-95">
           <Plus size={16} /> Nuevo Empleado
         </button>
+        )}
       </div>
 
       {/* Role filter chips */}
@@ -275,10 +301,12 @@ export default function Staff() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
+                        {canEditRow(s) && (
                         <button data-testid={`edit-staff-${s.id}`} onClick={() => openEdit(s)}
                           className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors">
                           <Edit2 size={14} />
                         </button>
+                        )}
                         <button onClick={() => toggleActive(s)}
                           className={`p-1.5 rounded transition-colors ${s.is_active ? 'text-slate-400 hover:text-red-600 hover:bg-red-50' : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50'}`}>
                           {s.is_active ? <UserX size={14} /> : <UserCheck size={14} />}
@@ -345,7 +373,7 @@ export default function Staff() {
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">Rol *</label>
                 <select data-testid="staff-role-group" value={roleGroup} onChange={e => handleGroupChange(e.target.value)}
                   className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500">
-                  {ROLE_GROUPS.map(g => (
+                  {roleGroupsUi.map(g => (
                     <option key={g.group} value={g.group}>{g.label}</option>
                   ))}
                 </select>

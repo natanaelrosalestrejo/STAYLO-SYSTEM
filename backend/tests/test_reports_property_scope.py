@@ -79,15 +79,15 @@ def test_allowed_property_ids_manager_never_tenant_wide_without_assignment():
 
 
 def test_allowed_property_ids_owner_uses_allowed_property_ids_for_tenant_wide():
-    """Owner/admin reports scope delegates to _allowed_property_ids (tenant property list)."""
+    """Owner/manager reports scope delegates to _allowed_property_ids (tenant property list)."""
     u = _user(role="owner", tenant_id="tenant-1", property_id=None)
     with patch("auth._allowed_property_ids", new_callable=AsyncMock, return_value=["p1", "p2"]):
         got = asyncio.run(allowed_property_ids_for_reports(u))
     assert sorted(got or []) == ["p1", "p2"]
 
 
-def test_allowed_property_ids_admin_uses_single_property_when_set():
-    u = _user(role="admin", tenant_id="tenant-1", property_id="only-hotel")
+def test_allowed_property_ids_group_manager_uses_single_property_when_set():
+    u = _user(role="manager", tenant_id="tenant-1", property_id="only-hotel")
     assert asyncio.run(allowed_property_ids_for_reports(u)) == ["only-hotel"]
 
 

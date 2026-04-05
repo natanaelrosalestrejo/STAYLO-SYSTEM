@@ -60,7 +60,7 @@ export default function Reservations() {
   const [checkinConfirm, setCheckinConfirm] = useState(null);
   const [detailReservation, setDetailReservation] = useState(null);
 
-  const isReceptionist = ['admin', 'receptionist'].includes(user?.role);
+  const isReceptionist = ['manager', 'receptionist', 'sales'].includes(user?.role);
   const today = new Date().toISOString().split('T')[0];
 
   const fetchData = async () => {

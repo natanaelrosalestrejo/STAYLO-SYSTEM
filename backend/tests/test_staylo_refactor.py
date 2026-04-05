@@ -45,14 +45,14 @@ class TestAuth:
         r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "admin@hotel.com", "password": "admin123"})
         assert r.status_code == 200
         data = r.json()
-        assert data["user"]["role"] == "admin"
+        assert data["user"]["role"] == "manager"
         print("PASS: Hotel admin login works")
 
     def test_receptionist_login(self):
         r = requests.post(f"{BASE_URL}/api/auth/login", json={"email": "maria@hotel.com", "password": "recep123"})
         assert r.status_code == 200
         data = r.json()
-        assert data["user"]["role"] in ["receptionist", "admin", "manager"]
+        assert data["user"]["role"] in ["receptionist", "manager"]
         print("PASS: Receptionist login works")
 
 

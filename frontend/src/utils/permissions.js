@@ -85,7 +85,8 @@ const OWNER_HOME_ORDER = [
   ...GARDEN_MODULE_KEYS,
 ];
 
-const ADMIN_HOME_ORDER = [
+/** Prioridad de landing para gerente operativo de grupo. */
+const GROUP_MANAGER_HOME_ORDER = [
   'hotels',
   'event-gardens',
   'corporate',
@@ -135,8 +136,8 @@ const STAFF_LIGHT_HOME_ORDER = ['inbox', 'tasks', 'dashboard', ...GARDEN_MODULE_
  */
 const ROLE_ENTRY_MODULE = {
   owner: 'corporate',
-  manager: 'dashboard',
   finance: 'reports',
+  sales: 'dashboard',
 };
 
 /**
@@ -216,9 +217,11 @@ export function getDefaultPathForRole(roleOrUser) {
     return homeFromGardenOnlyModules(modules);
   }
 
-  if (role === 'admin') {
-    const path = firstHomeFromModules(modules, ADMIN_HOME_ORDER, MODULE_HOME);
+  if (role === 'manager') {
+    const path = firstHomeFromModules(modules, GROUP_MANAGER_HOME_ORDER, MODULE_HOME);
     if (path) return path;
+    const pathRm = firstHomeFromModules(modules, RECEPTIONIST_MANAGER_HOME_ORDER, MODULE_HOME);
+    if (pathRm) return pathRm;
     return homeFromGardenOnlyModules(modules);
   }
 
@@ -228,7 +231,7 @@ export function getDefaultPathForRole(roleOrUser) {
     return homeFromGardenOnlyModules(modules);
   }
 
-  if (role === 'receptionist' || role === 'manager') {
+  if (role === 'receptionist' || role === 'sales') {
     const path = firstHomeFromModules(modules, RECEPTIONIST_MANAGER_HOME_ORDER, MODULE_HOME);
     if (path) return path;
     return homeFromGardenOnlyModules(modules);

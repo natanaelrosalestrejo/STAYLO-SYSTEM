@@ -86,7 +86,7 @@ def test_ensure_any_module_denies_when_none_match():
         with patch("auth.resolve_effective_modules_for_user", new_callable=AsyncMock) as m:
             m.return_value = ["dashboard"]
             with pytest.raises(HTTPException) as ei:
-                await ensure_user_has_any_module(_user(role="admin"), "jardines", "garden_lodging_integration")
+                await ensure_user_has_any_module(_user(role="manager"), "jardines", "garden_lodging_integration")
             assert ei.value.status_code == 403
 
     asyncio.run(run())
@@ -139,10 +139,10 @@ def test_event_context_any_module_accepts_jardines_or_hotel_events():
     async def run():
         with patch("auth.resolve_effective_modules_for_user", new_callable=AsyncMock) as m:
             m.return_value = ["jardines", "dashboard"]
-            await ensure_user_has_any_module(_user(role="admin"), "jardines", "hotel-events")
+            await ensure_user_has_any_module(_user(role="manager"), "jardines", "hotel-events")
         with patch("auth.resolve_effective_modules_for_user", new_callable=AsyncMock) as m:
             m.return_value = ["hotel-events"]
-            await ensure_user_has_any_module(_user(role="admin"), "jardines", "hotel-events")
+            await ensure_user_has_any_module(_user(role="manager"), "jardines", "hotel-events")
 
     asyncio.run(run())
 
@@ -185,7 +185,7 @@ def test_property_stats_denied_when_no_strategic_module():
             m.return_value = ["properties", "rooms", "dashboard"]
             with pytest.raises(HTTPException):
                 await ensure_user_has_any_module(
-                    _user(role="admin"),
+                    _user(role="manager"),
                     "hotels",
                     "event-gardens",
                     "corporate",
@@ -239,7 +239,7 @@ def test_login_and_auth_me_modules_consistent_smoke():
         timeout=30,
     )
     if r.status_code != 200:
-        pytest.skip("admin login not available in this environment")
+        pytest.skip("manager demo login not available in this environment")
     login_mod = r.json()["user"]["modules"]
     token = r.json()["access_token"]
     r2 = requests.get(
