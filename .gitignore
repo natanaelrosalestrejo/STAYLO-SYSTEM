@@ -127,8 +127,7 @@ celerybeat.pid
 # SageMath parsed files
 *.sage.py
 
-# Environments
-.env
+# Environments (see STAYLO block for .env patterns)
 .venv
 env/
 venv/
@@ -180,12 +179,40 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
-# ============== STAYLO project (pre-GitHub cleanup) ==============
-# Local / environment (do not commit secrets)
+# ============== STAYLO (policy: production repo hygiene) ==============
+# Local workspace (do not commit Cursor/agent scratch)
+memory/
+
+# Environment (secrets; keep .env.example versioned)
 .env
-.env.local
-.env.*.local
+.env.*
 !.env.example
+
+# Python virtualenv & bytecode (see also top of file)
+.venv/
+venv/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tools / downloads
+cloudflared*
+mongodb-database-tools*
+*.deb
+*.tgz
+*.zip
+
+# Backups / dumps
+*.bson
+*.dump
+backup_before_admin_cleanup/
 
 # Generated reports and caches
 test_reports/
@@ -198,13 +225,4 @@ test_reports/
 # Emergent / platform-specific (not needed for open-source repo)
 .emergent/
 
-# Agent / editor workspace memory (optional; exclude from repo)
-memory/
-
-# Dependencies (reinstall from package.json / requirements.txt)
-node_modules/
-
-# OS junk
-.DS_Store
-Thumbs.db
 Desktop.ini
