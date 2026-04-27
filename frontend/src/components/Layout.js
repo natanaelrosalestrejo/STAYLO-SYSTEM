@@ -9,7 +9,7 @@ import { deriveShellContext } from '../utils/shellContext';
 import {
   LayoutDashboard, CalendarCheck, BedDouble, Users, Inbox,
   CheckSquare, BarChart3, UserCog, LogOut, Bell, Menu, BookOpen,
-  Building2, Sparkles, ChevronDown, Globe2, Settings, Shield, Layers,
+  Building2, Sparkles, ChevronDown, Globe2, Settings, Layers,
   CalendarDays, Calendar, Cpu, CreditCard
 } from 'lucide-react';
 
@@ -18,7 +18,6 @@ const navItems = [
   { to: '/platform-admin',              icon: LayoutDashboard, label: 'Resumen',      roles: ['platform_admin'], end: true },
   { to: '/platform-admin/tenants',       icon: Globe2,          label: 'Tenants',      roles: ['platform_admin'] },
   { to: '/platform-admin/propiedades',   icon: Building2,       label: 'Propiedades',  roles: ['platform_admin'] },
-  { to: '/platform-admin/permisos',      icon: Shield,          label: 'Permisos',     roles: ['platform_admin'] },
   { to: '/platform-admin/onboarding',    icon: Cpu,             label: 'Onboarding',   roles: ['platform_admin'] },
   { to: '/platform-admin/usuarios',      icon: Users,           label: 'Usuarios',     roles: ['platform_admin'] },
   { to: '/platform-admin/facturacion',   icon: CreditCard,      label: 'Facturación',  roles: ['platform_admin'] },

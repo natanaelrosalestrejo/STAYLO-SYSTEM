@@ -9,7 +9,6 @@ export const ROUTE_MODULE_MAP = {
   '/platform-admin': 'platform_admin',
   '/platform-admin/tenants': 'platform_admin',
   '/platform-admin/propiedades': 'platform_admin',
-  '/platform-admin/permisos': 'platform_admin',
   '/platform-admin/onboarding': 'platform_admin',
   '/platform-admin/usuarios': 'platform_admin',
   '/platform-admin/facturacion': 'platform_admin',

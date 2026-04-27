@@ -1869,6 +1869,7 @@ export default function PlatformAdmin() {
         {activeTab === 4 && <OnboardingWizard tenants={tenants} roomTypes={roomTypes} onRefresh={fetchAll} />}
         {activeTab === 5 && (
           <PlatformUsersTab users={users} tenants={tenants} properties={properties} onRefresh={fetchAll} />
+
         )}
         {activeTab === 6 && <BillingTab tenants={tenants} onRefresh={fetchAll} />}
       </div>
