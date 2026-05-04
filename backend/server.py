@@ -5,7 +5,7 @@ from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
-import logging, uuid, json, re, random, asyncio, secrets
+import logging, uuid, json, re, random, asyncio, secrets, html
 from pathlib import Path
 import resend
 
@@ -1231,7 +1231,7 @@ async def send_booking_confirmation_email(booking_data: dict, booking_ref: str):
     if booking_data.get("extras_items"):
         extras_html = "<p style='margin:4px 0;font-size:14px;color:#666;'><strong>Extras:</strong></p><ul style='margin:4px 0;padding-left:18px;'>"
         for e in booking_data["extras_items"]:
-            extras_html += f"<li style='font-size:13px;color:#666;'>{e['name']} — ${e['price']:,.0f} MXN</li>"
+            extras_html += f"<li style='font-size:13px;color:#666;'>{html.escape(str(e['name']))} — ${e['price']:,.0f} MXN</li>"
         extras_html += "</ul>"
     type_label = "Junior Suite" if booking_data.get("room_type") == "junior_suite" else "Habitación Doble"
     html_body = f"""
@@ -1241,15 +1241,15 @@ async def send_booking_confirmation_email(booking_data: dict, booking_ref: str):
         <h1 style="color:#fcf5e0;font-size:32px;font-weight:300;margin:0;letter-spacing:0.02em;font-family:Georgia,serif;">Reserva Confirmada</h1>
       </div>
       <div style="padding:32px;">
-        <p style="color:#625746;font-size:15px;margin:0 0 20px;">Estimado/a <strong>{booking_data['first_name']} {booking_data['last_name']}</strong>,</p>
+        <p style="color:#625746;font-size:15px;margin:0 0 20px;">Estimado/a <strong>{html.escape(booking_data['first_name'])} {html.escape(booking_data['last_name'])}</strong>,</p>
         <p style="color:#666;font-size:14px;margin:0 0 24px;line-height:1.6;">Nos complace confirmar su reserva. A continuación encontrará el resumen de su estancia:</p>
         <div style="background:#fff;border:1px solid #e8dfd5;border-radius:12px;padding:24px;margin-bottom:20px;">
           <p style="color:#917a6a;font-size:11px;letter-spacing:0.15em;margin:0 0 12px;font-weight:600;">DETALLES DE LA RESERVA</p>
           <table style="width:100%;border-collapse:collapse;">
-            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Referencia</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">#{booking_ref}</td></tr>
-            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Habitación</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{booking_data.get('room_number','—')} · {type_label}</td></tr>
-            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Check-in</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{booking_data['check_in_date']}</td></tr>
-            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Check-out</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{booking_data['check_out_date']}</td></tr>
+            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Referencia</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">#{html.escape(booking_ref)}</td></tr>
+            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Habitación</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{html.escape(str(booking_data.get('room_number','—')))} · {html.escape(type_label)}</td></tr>
+            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Check-in</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{html.escape(booking_data['check_in_date'])}</td></tr>
+            <tr><td style="padding:6px 0;color:#666;font-size:13px;">Check-out</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{html.escape(booking_data['check_out_date'])}</td></tr>
             <tr><td style="padding:6px 0;color:#666;font-size:13px;">Huéspedes</td><td style="padding:6px 0;color:#625746;font-size:13px;font-weight:600;text-align:right;">{booking_data['adults']} adultos{', '+str(booking_data['children'])+' niños' if booking_data.get('children') else ''}</td></tr>
             <tr style="border-top:1px solid #e8dfd5;"><td style="padding:10px 0 4px;color:#625746;font-size:14px;font-weight:700;">Total</td><td style="padding:10px 0 4px;color:#625746;font-size:16px;font-weight:700;text-align:right;">${booking_data['total_amount']:,.0f} MXN</td></tr>
           </table>
