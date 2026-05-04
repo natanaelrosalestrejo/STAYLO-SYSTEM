@@ -28,6 +28,7 @@ class UserModel(BaseModel):
     property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    force_password_change: bool = False
 
 
 class UserCreate(BaseModel):
@@ -77,6 +78,7 @@ class UserResponse(BaseModel):
     property_id: Optional[str] = None
     property_ids: Optional[List[str]] = None
     tenant_id: Optional[str] = None
+    force_password_change: bool = False
 
 
 # ----- Room -----

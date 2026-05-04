@@ -30,8 +30,13 @@ export default function Login() {
       login(res.data.access_token, res.data.user);
       toast.success(`Bienvenido, ${res.data.user.name}`);
       const role = res.data.user.role;
-      if (role === 'platform_admin') navigate('/platform-admin');
-      else navigate(getDefaultPathForRole(res.data.user));
+      if (res.data.user.force_password_change) {
+        navigate('/change-password');
+      } else if (role === 'platform_admin') {
+        navigate('/platform-admin');
+      } else {
+        navigate(getDefaultPathForRole(res.data.user));
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Credenciales incorrectas');
     } finally { setLoading(false); }

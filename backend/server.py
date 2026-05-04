@@ -2,7 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
 from starlette.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
-import logging, uuid, json, re, random, asyncio
+import logging, uuid, json, re, random, asyncio, secrets
 from pathlib import Path
 import resend
 
@@ -529,8 +529,10 @@ async def task_suggestion(data: dict, current_user: UserModel = Depends(get_curr
     response = await chat.send_message(UserMessage(text=f"Tarea para: '{data.get('issue', '')}'"))
     try:
         match = re.search(r'\{.*\}', response, re.DOTALL)
-        if match: return json.loads(match.group())
-    except: pass
+        if match:
+            return json.loads(match.group())
+    except Exception as e:
+        logger.warning(f"AI task-suggestion: no se pudo parsear JSON de la respuesta: {e}")
     return {"title": data.get("issue", "Nueva tarea"), "description": response, "priority": "medium", "category": "general"}
 
 # ====================== PROPERTIES ======================
@@ -1702,22 +1704,26 @@ async def onboard_property(data: dict, current_user: UserModel = Depends(require
     # Create owner account
     if data.get("owner_email") and data.get("owner_name"):
         if not await db.users.find_one({"email": data["owner_email"]}):
+            owner_pwd = secrets.token_urlsafe(12)
             owner_user = UserModel(
                 name=data["owner_name"], email=data["owner_email"],
-                password_hash=hash_password("owner123"), role="owner",
-                department="Dirección", avatar_color="#8B5CF6")
+                password_hash=hash_password(owner_pwd), role="owner",
+                department="Dirección", avatar_color="#8B5CF6",
+                force_password_change=True)
             await db.users.insert_one(owner_user.model_dump())
-            created_users.append({"role": "owner", "email": data["owner_email"], "temp_password": "owner123"})
+            created_users.append({"role": "owner", "email": data["owner_email"], "temp_password": owner_pwd})
 
     # Create manager account (onboarding contact for the property)
     if data.get("admin_email") and data.get("admin_name"):
         if not await db.users.find_one({"email": data["admin_email"]}):
+            mgr_pwd = secrets.token_urlsafe(12)
             mgr_user = UserModel(
                 name=data["admin_name"], email=data["admin_email"],
-                password_hash=hash_password("admin123"), role="manager",
-                department="Administración", avatar_color="#059669")
+                password_hash=hash_password(mgr_pwd), role="manager",
+                department="Administración", avatar_color="#059669",
+                force_password_change=True)
             await db.users.insert_one(mgr_user.model_dump())
-            created_users.append({"role": "manager", "email": data["admin_email"], "temp_password": "admin123"})
+            created_users.append({"role": "manager", "email": data["admin_email"], "temp_password": mgr_pwd})
 
     return {
         "success": True, "property_id": prop.id, "property_name": prop.name,

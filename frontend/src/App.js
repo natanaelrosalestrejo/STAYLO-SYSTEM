@@ -27,6 +27,7 @@ import PropertyManagement from "./pages/PropertyManagement";
 import PlatformAdmin from "./pages/PlatformAdmin";
 import HotelEvents from "./pages/HotelEvents";
 import RoomTypes from "./pages/RoomTypes";
+import ChangePassword from "./pages/ChangePassword";
 import { canAccessRoute, getDefaultPathForRole } from "./utils/permissions";
 
 function hasEffectiveModules(user) {
@@ -64,6 +65,7 @@ const ProtectedRoute = ({ children, allowedRoles = null }) => {
     </div>
   );
   if (!user) return <Navigate to="/login" replace />;
+  if (user.force_password_change) return <Navigate to="/change-password" replace />;
   if (!hasEffectiveModules(user)) {
     logout();
     return <Navigate to="/login" replace />;
@@ -107,6 +109,7 @@ function AppRoutes() {
       <Route path="/staff" element={<ProtectedRoute allowedRoles={['platform_admin','manager']}><Staff /></ProtectedRoute>} />
       <Route path="/properties" element={<ProtectedRoute allowedRoles={['manager']}><PropertyManagement /></ProtectedRoute>} />
       <Route path="/catalogo" element={<ProtectedRoute allowedRoles={['receptionist', 'sales', 'manager', 'owner']}><RoomsCatalog /></ProtectedRoute>} />
+      <Route path="/change-password" element={<ChangePassword />} />
       <Route path="/reservar" element={<BookingWizard />} />
       <Route path="/mi-reserva" element={<BookingLookup />} />
       <Route path="*" element={<Navigate to={defaultPath} replace />} />
