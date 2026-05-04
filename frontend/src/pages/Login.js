@@ -112,6 +112,16 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="text-center mt-3">
+            <button type="button" onClick={() => navigate('/forgot-password')}
+              className="text-xs transition-all"
+              style={{ color: '#b8a898', fontFamily: 'Montserrat, sans-serif', background: 'none', border: 'none', cursor: 'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.color = '#625746'}
+              onMouseLeave={e => e.currentTarget.style.color = '#b8a898'}>
+              ¿Olvidaste tu contraseña?
+            </button>
+          </div>
+
           {/* Demo accounts */}
           <div className="mt-6 pt-5" style={{ borderTop: '1px solid #f0e8dc' }}>
             <p className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: '#d2c7b6', fontFamily: 'Montserrat, sans-serif' }}>Cuentas demo</p>

@@ -36,6 +36,7 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 HOTEL_NOTIFICATION_EMAIL = os.environ.get("HOTEL_NOTIFICATION_EMAIL")
 STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 
 # CORS: in production require explicit origins; in development allow default wildcard for local use.
 _cors_raw = os.environ.get("CORS_ORIGINS", "*").strip()

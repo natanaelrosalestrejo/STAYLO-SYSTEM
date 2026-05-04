@@ -1780,6 +1780,8 @@ async def ensure_indexes():
     await db.event_bookings.create_index([("id", 1)],                           unique=True, name="evbooking_id_unique")
     await db.event_bookings.create_index([("property_id", 1)],                               name="evbooking_prop")
     await db.payment_transactions.create_index([("reservation_id", 1)],                      name="pay_reservation")
+    await db.password_reset_tokens.create_index([("token", 1)],        unique=True,           name="prt_token_unique")
+    await db.password_reset_tokens.create_index([("expires_at", 1)],   expireAfterSeconds=0,  name="prt_ttl")
 
 @app.on_event("startup")
 async def startup():
