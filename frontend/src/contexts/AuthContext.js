@@ -6,6 +6,7 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [networkError, setNetworkError] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem('hotel_token');
@@ -20,7 +21,17 @@ export const AuthProvider = ({ children }) => {
           const fresh = r.data;
           setUser(fresh);
           localStorage.setItem('hotel_user', JSON.stringify(fresh));
-        }).catch(() => {});
+          setNetworkError(false);
+        }).catch((err) => {
+          if (err.response?.status === 401) {
+            localStorage.removeItem('hotel_token');
+            localStorage.removeItem('hotel_user');
+            delete api.defaults.headers.common['Authorization'];
+            setUser(null);
+          } else if (!err.response) {
+            setNetworkError(true);
+          }
+        });
       } catch (e) {
         localStorage.removeItem('hotel_token');
         localStorage.removeItem('hotel_user');
@@ -49,6 +60,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('hotel_user', JSON.stringify(userData));
     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     setUser(userData);
+    setNetworkError(false);
   };
 
   const logout = () => {
@@ -66,6 +78,21 @@ export const AuthProvider = ({ children }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
+      {networkError && (
+        <div
+          className="fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-3 py-2 text-sm font-medium"
+          style={{ background: '#d97706', color: '#fff', fontFamily: 'Montserrat, sans-serif' }}
+        >
+          <span>Sin conexión con el servidor — mostrando datos en caché</span>
+          <button
+            onClick={() => setNetworkError(false)}
+            className="underline text-xs opacity-80 hover:opacity-100"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }}
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   );

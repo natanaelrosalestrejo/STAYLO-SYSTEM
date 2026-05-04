@@ -17,6 +17,7 @@ import Staff from "./pages/Staff";
 import RoomsCatalog from "./pages/RoomsCatalog";
 import BookingWizard from "./pages/BookingWizard";
 import BookingLookup from "./pages/BookingLookup";
+import CheckoutStatus from "./pages/CheckoutStatus";
 import CorporateDashboard from "./pages/CorporateDashboard";
 import EventGarden from "./pages/EventGarden";
 import HotelsOverview from "./pages/HotelsOverview";
@@ -116,6 +117,7 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/reservar" element={<BookingWizard />} />
       <Route path="/mi-reserva" element={<BookingLookup />} />
+      <Route path="/checkout/status/:session_id" element={<CheckoutStatus />} />
       <Route path="*" element={<Navigate to={defaultPath} replace />} />
     </Routes>
   );
