@@ -2,7 +2,7 @@
 import asyncio
 
 from models import UserModel
-from server import dashboard_stats, occupancy_report, revenue_breakdown, revenue_insights
+from routers.reports import dashboard_stats, occupancy_report, revenue_breakdown, revenue_insights
 
 
 def _finance_no_property():

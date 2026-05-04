@@ -3,7 +3,7 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from models import UserModel
-from server import list_properties
+from routers.properties import list_properties
 
 
 def _manager_multi():
@@ -31,6 +31,6 @@ def test_list_properties_scopes_manager_to_assigned():
         )
         return m
 
-    with patch("server.db.properties.find", side_effect=fake_find):
+    with patch("routers.properties.db.properties.find", side_effect=fake_find):
         out = asyncio.run(list_properties(current_user=_manager_multi()))
     assert {p["id"] for p in out} == {"alma_hotel", "garden_margati"}
