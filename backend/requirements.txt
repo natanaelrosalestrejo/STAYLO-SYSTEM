@@ -25,6 +25,7 @@ python-multipart>=0.0.9
 jq>=1.6.0
 typer>=0.9.0
 resend>=0.8.0
+slowapi>=0.1.9
 
 # Optional (Emergent only): uncomment for LLM + Stripe checkout when running inside Emergent.
 # emergentintegrations==0.1.0

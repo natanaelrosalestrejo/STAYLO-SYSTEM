@@ -1,4 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, Request
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from starlette.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict
 from datetime import datetime, timezone, timedelta
@@ -100,6 +103,7 @@ else:
     logging.warning("RESEND_API_KEY not set. Email sending disabled. Reservation creation will still succeed.")
 
 app = FastAPI()
+limiter = Limiter(key_func=get_remote_address)
 api_router = APIRouter(prefix="/api")
 
 # ====================== ROUTES ======================
@@ -1267,7 +1271,8 @@ async def send_booking_confirmation_email(booking_data: dict, booking_ref: str):
         logger.error(f"Email error: {e}")
 
 @api_router.get("/public/booking/lookup")
-async def lookup_booking(booking_ref: str, email: str):
+@limiter.limit("10/minute")
+async def lookup_booking(request: Request, booking_ref: str, email: str):
     # booking_ref is first 8 chars of reservation id (uppercased)
     reservations = await db.reservations.find(
         {"guest_name": {"$exists": True}}, {"_id": 0}
@@ -1307,7 +1312,8 @@ async def lookup_booking(booking_ref: str, email: str):
     }
 
 @api_router.get("/public/availability")
-async def check_availability(check_in: str, check_out: str, adults: int = 2):
+@limiter.limit("20/minute")
+async def check_availability(request: Request, check_in: str, check_out: str, adults: int = 2):
     from datetime import date as dt_date
     try:
         ci = dt_date.fromisoformat(check_in)
@@ -1334,7 +1340,8 @@ async def check_availability(check_in: str, check_out: str, adults: int = 2):
     return results
 
 @api_router.post("/public/booking/create")
-async def create_public_booking(data: PublicBookingCreate):
+@limiter.limit("5/minute")
+async def create_public_booking(request: Request, data: PublicBookingCreate):
     from datetime import date as dt_date
     ci = dt_date.fromisoformat(data.check_in_date)
     co = dt_date.fromisoformat(data.check_out_date)
@@ -1383,6 +1390,7 @@ async def create_public_booking(data: PublicBookingCreate):
             "check_in_date": data.check_in_date, "check_out_date": data.check_out_date}
 
 @api_router.post("/public/checkout/session")
+@limiter.limit("5/minute")
 async def create_public_checkout(data: dict, request: Request):
     if StripeCheckout is None or CheckoutSessionRequest is None:
         raise HTTPException(
@@ -1774,5 +1782,7 @@ app.include_router(event_lodging_router, prefix="/api")
 app.add_middleware(CORSMiddleware, allow_credentials=True,
                    allow_origins=CORS_ORIGINS_LIST,
                    allow_methods=["*"], allow_headers=["*"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
