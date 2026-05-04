@@ -1273,15 +1273,11 @@ async def send_booking_confirmation_email(booking_data: dict, booking_ref: str):
 @api_router.get("/public/booking/lookup")
 @limiter.limit("10/minute")
 async def lookup_booking(request: Request, booking_ref: str, email: str):
-    # booking_ref is first 8 chars of reservation id (uppercased)
-    reservations = await db.reservations.find(
-        {"guest_name": {"$exists": True}}, {"_id": 0}
-    ).to_list(10000)
-    match = None
-    for r in reservations:
-        if r["id"][:8].upper() == booking_ref.upper():
-            match = r
-            break
+    match = await db.reservations.find_one(
+        {"id": {"$regex": f"^{re.escape(booking_ref.lower())}"},
+         "guest_name": {"$exists": True}},
+        {"_id": 0}
+    )
     if not match:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
     guest = await db.guests.find_one({"id": match["guest_id"]}, {"_id": 0})
@@ -1764,9 +1760,31 @@ async def update_features(
 
 # ====================== APP STARTUP ======================
 
+async def ensure_indexes():
+    await db.reservations.create_index([("id", 1)],                             unique=True, name="res_id_unique")
+    await db.reservations.create_index([("property_id", 1), ("status", 1)],                  name="res_prop_status")
+    await db.reservations.create_index([("property_id", 1), ("check_in_date", 1)],           name="res_prop_checkin")
+    await db.reservations.create_index([("guest_id", 1)],                                    name="res_guest")
+    await db.reservations.create_index([("status", 1)],                                      name="res_status")
+    await db.rooms.create_index([("id", 1)],                                    unique=True, name="room_id_unique")
+    await db.rooms.create_index([("property_id", 1), ("status", 1)],                         name="room_prop_status")
+    await db.rooms.create_index([("property_id", 1)],                                        name="room_prop")
+    await db.users.create_index([("email", 1)],                                 unique=True, name="user_email_unique")
+    await db.users.create_index([("id", 1)],                                    unique=True, name="user_id_unique")
+    await db.users.create_index([("tenant_id", 1)],                                          name="user_tenant")
+    await db.guests.create_index([("id", 1)],                                   unique=True, name="guest_id_unique")
+    await db.guests.create_index([("email", 1)],                                             name="guest_email")
+    await db.guests.create_index([("tenant_id", 1)],                                         name="guest_tenant")
+    await db.properties.create_index([("id", 1)],                               unique=True, name="prop_id_unique")
+    await db.properties.create_index([("tenant_id", 1)],                                     name="prop_tenant")
+    await db.event_bookings.create_index([("id", 1)],                           unique=True, name="evbooking_id_unique")
+    await db.event_bookings.create_index([("property_id", 1)],                               name="evbooking_prop")
+    await db.payment_transactions.create_index([("reservation_id", 1)],                      name="pay_reservation")
+
 @app.on_event("startup")
 async def startup():
     await run_all()
+    await ensure_indexes()
 
 @app.on_event("shutdown")
 async def shutdown(): client.close()
