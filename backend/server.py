@@ -58,6 +58,12 @@ from models import (
     EventSpaceCreate,
     EventSpaceModel,
     ExtrasRequest,
+    GardenInventoryItemCreate,
+    GardenInventoryItemModel,
+    GardenInventoryItemUpdate,
+    GardenVisitCreate,
+    GardenVisitModel,
+    GardenVisitUpdate,
     GuestCreate,
     GuestModel,
     HotelSpaceCreate,
@@ -72,6 +78,9 @@ from models import (
     PublicBookingCreate,
     ReservationCreate,
     ReservationModel,
+    RestaurantMealOrderCreate,
+    RestaurantMealOrderModel,
+    RestaurantMealOrderUpdate,
     RolePermissionUpdate,
     RoomCreate,
     RoomModel,
@@ -86,6 +95,9 @@ from models import (
     UserModel,
     UserResponse,
     UserUpdate,
+    VendorCreate,
+    VendorModel,
+    VendorUpdate,
 )
 from routers import messages_router, tasks_router, users_router, auth_router, rooms_router, guests_router, event_lodging_router
 from seeds import COLORS, DEMO_PROPERTY_ID, run_all
@@ -1724,6 +1736,245 @@ async def onboard_property(data: dict, current_user: UserModel = Depends(require
         "property_type": property_type, "created_rooms": created_rooms,
         "created_spaces": created_spaces, "created_users": created_users,
     }
+
+# ====================== PROPERTY ASSOCIATIONS ======================
+
+@api_router.patch("/properties/{prop_id}/associations")
+async def update_property_associations(
+    prop_id: str,
+    data: dict,
+    _: UserModel = Depends(require_module("properties")),
+    current_user: UserModel = Depends(require_role("manager", "platform_admin")),
+):
+    associated = data.get("associated_property_ids", [])
+    if not isinstance(associated, list):
+        raise HTTPException(status_code=400, detail="associated_property_ids debe ser una lista")
+    await db.properties.update_one({"id": prop_id}, {"$set": {"associated_property_ids": associated}})
+    prop = await db.properties.find_one({"id": prop_id}, {"_id": 0})
+    if not prop: raise HTTPException(status_code=404, detail="Propiedad no encontrada")
+    return prop
+
+
+# ====================== VENDORS (PROVEEDORES DE JARDÍN) ======================
+
+@api_router.get("/vendors")
+async def list_vendors(
+    property_id: Optional[str] = None,
+    category: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_vendors")),
+):
+    q: Dict = {}
+    if property_id: q["property_id"] = property_id
+    if category: q["category"] = category
+    vendors = await db.vendors.find(q, {"_id": 0}).sort("name", 1).to_list(200)
+    return vendors
+
+@api_router.post("/vendors")
+async def create_vendor(
+    data: VendorCreate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_vendors")),
+):
+    vendor = VendorModel(**data.model_dump())
+    await db.vendors.insert_one(vendor.model_dump())
+    return vendor.model_dump()
+
+@api_router.patch("/vendors/{vendor_id}")
+async def update_vendor(
+    vendor_id: str,
+    data: VendorUpdate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_vendors")),
+):
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    await db.vendors.update_one({"id": vendor_id}, {"$set": update})
+    v = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
+    if not v: raise HTTPException(status_code=404, detail="Proveedor no encontrado")
+    return v
+
+@api_router.delete("/vendors/{vendor_id}")
+async def delete_vendor(
+    vendor_id: str,
+    _: UserModel = Depends(require_any_module("jardines", "garden_vendors")),
+    current_user: UserModel = Depends(require_role("manager")),
+):
+    await db.vendors.delete_one({"id": vendor_id})
+    return {"deleted": True}
+
+
+# ====================== GARDEN INVENTORY (INVENTARIO DEL JARDÍN) ======================
+
+@api_router.get("/garden-inventory")
+async def list_garden_inventory(
+    property_id: Optional[str] = None,
+    category: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_inventory")),
+):
+    q: Dict = {}
+    if property_id: q["property_id"] = property_id
+    if category: q["category"] = category
+    items = await db.garden_inventory.find(q, {"_id": 0}).sort("name", 1).to_list(500)
+    return items
+
+@api_router.post("/garden-inventory")
+async def create_garden_inventory_item(
+    data: GardenInventoryItemCreate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_inventory")),
+):
+    item = GardenInventoryItemModel(**data.model_dump())
+    await db.garden_inventory.insert_one(item.model_dump())
+    return item.model_dump()
+
+@api_router.patch("/garden-inventory/{item_id}")
+async def update_garden_inventory_item(
+    item_id: str,
+    data: GardenInventoryItemUpdate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_inventory")),
+):
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    await db.garden_inventory.update_one({"id": item_id}, {"$set": update})
+    item = await db.garden_inventory.find_one({"id": item_id}, {"_id": 0})
+    if not item: raise HTTPException(status_code=404, detail="Artículo no encontrado")
+    return item
+
+@api_router.delete("/garden-inventory/{item_id}")
+async def delete_garden_inventory_item(
+    item_id: str,
+    _: UserModel = Depends(require_any_module("jardines", "garden_inventory")),
+    current_user: UserModel = Depends(require_role("manager")),
+):
+    await db.garden_inventory.delete_one({"id": item_id})
+    return {"deleted": True}
+
+
+# ====================== GARDEN VISITS (CITAS DEL JARDÍN) ======================
+
+@api_router.get("/garden-visits")
+async def list_garden_visits(
+    property_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_visits")),
+):
+    q: Dict = {}
+    if property_id: q["property_id"] = property_id
+    if status: q["status"] = status
+    visits = await db.garden_visits.find(q, {"_id": 0}).sort("visit_date", 1).to_list(500)
+    return visits
+
+@api_router.post("/garden-visits")
+async def create_garden_visit(
+    data: GardenVisitCreate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_visits")),
+):
+    visit = GardenVisitModel(**data.model_dump(), created_by=current_user.id)
+    await db.garden_visits.insert_one(visit.model_dump())
+    return visit.model_dump()
+
+@api_router.patch("/garden-visits/{visit_id}")
+async def update_garden_visit(
+    visit_id: str,
+    data: GardenVisitUpdate,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_visits")),
+):
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    await db.garden_visits.update_one({"id": visit_id}, {"$set": update})
+    v = await db.garden_visits.find_one({"id": visit_id}, {"_id": 0})
+    if not v: raise HTTPException(status_code=404, detail="Visita no encontrada")
+    return v
+
+@api_router.delete("/garden-visits/{visit_id}")
+async def delete_garden_visit(
+    visit_id: str,
+    current_user: UserModel = Depends(require_any_module("jardines", "garden_visits")),
+):
+    await db.garden_visits.delete_one({"id": visit_id})
+    return {"deleted": True}
+
+
+# ====================== RESTAURANT (MÓDULO DE RESTAURANTE - HOTEL) ======================
+
+@api_router.get("/restaurant/meal-orders")
+async def list_meal_orders(
+    property_id: Optional[str] = None,
+    meal_date: Optional[str] = None,
+    meal_type: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    q: Dict = {"status": {"$ne": "cancelled"}}
+    if property_id: q["property_id"] = property_id
+    if meal_date: q["meal_date"] = meal_date
+    if meal_type: q["meal_type"] = meal_type
+    orders = await db.restaurant_meal_orders.find(q, {"_id": 0}).sort("meal_date", -1).to_list(2000)
+    return orders
+
+@api_router.get("/restaurant/meal-orders/all")
+async def list_all_meal_orders(
+    property_id: Optional[str] = None,
+    meal_date: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    q: Dict = {}
+    if property_id: q["property_id"] = property_id
+    if meal_date: q["meal_date"] = meal_date
+    orders = await db.restaurant_meal_orders.find(q, {"_id": 0}).sort("meal_date", -1).to_list(2000)
+    return orders
+
+@api_router.post("/restaurant/meal-orders")
+async def create_meal_order(
+    data: RestaurantMealOrderCreate,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    order = RestaurantMealOrderModel(**data.model_dump(), created_by=current_user.id)
+    await db.restaurant_meal_orders.insert_one(order.model_dump())
+    return order.model_dump()
+
+@api_router.patch("/restaurant/meal-orders/{order_id}")
+async def update_meal_order(
+    order_id: str,
+    data: RestaurantMealOrderUpdate,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    await db.restaurant_meal_orders.update_one({"id": order_id}, {"$set": update})
+    o = await db.restaurant_meal_orders.find_one({"id": order_id}, {"_id": 0})
+    if not o: raise HTTPException(status_code=404, detail="Orden no encontrada")
+    return o
+
+@api_router.delete("/restaurant/meal-orders/{order_id}")
+async def delete_meal_order(
+    order_id: str,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    await db.restaurant_meal_orders.delete_one({"id": order_id})
+    return {"deleted": True}
+
+@api_router.get("/restaurant/daily-count")
+async def restaurant_daily_count(
+    property_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    current_user: UserModel = Depends(require_any_module("restaurant", "reservations")),
+):
+    """Daily plate count by meal type for kitchen planning."""
+    from datetime import date as dt_date
+    q: Dict = {"status": {"$ne": "cancelled"}}
+    if property_id: q["property_id"] = property_id
+    date_filter: Dict = {}
+    if date_from: date_filter["$gte"] = date_from
+    if date_to: date_filter["$lte"] = date_to
+    if date_filter: q["meal_date"] = date_filter
+    orders = await db.restaurant_meal_orders.find(q, {"_id": 0}).to_list(10000)
+    summary: Dict = {}
+    for o in orders:
+        d = o.get("meal_date", "")
+        mt = o.get("meal_type", "otro")
+        plates = o.get("plates", 1)
+        if d not in summary:
+            summary[d] = {}
+        summary[d][mt] = summary[d].get(mt, 0) + plates
+    result = []
+    for date_str, counts in sorted(summary.items()):
+        result.append({"date": date_str, "counts": counts, "total": sum(counts.values())})
+    return result
+
 
 # --- Feature Toggles ---
 @api_router.get("/properties/{prop_id}/features")

@@ -23,6 +23,7 @@ export const ROUTE_MODULE_MAP = {
   '/guests': 'guests',
   '/jardines': 'jardines',
   '/hotel-events': 'hotel-events',
+  '/restaurant': 'restaurant',
   '/room-types': 'room-types',
   '/inbox': 'inbox',
   '/tasks': 'tasks',
@@ -57,6 +58,7 @@ export const MODULE_HOME = {
   reports: '/reports',
   /** Property-scoped financial UI (maps to /reports); not global owner finance. */
   manager_financial_view: '/reports',
+  restaurant: '/restaurant',
   inbox: '/inbox',
   tasks: '/tasks',
   staff: '/staff',
@@ -127,7 +129,7 @@ const RECEPTIONIST_MANAGER_HOME_ORDER = [
 /** Finance lands on /reports only; never operational dashboard. */
 const FINANCE_HOME_ORDER = ['reports'];
 
-const STAFF_LIGHT_HOME_ORDER = ['inbox', 'tasks', 'dashboard', ...GARDEN_MODULE_KEYS];
+const STAFF_LIGHT_HOME_ORDER = ['restaurant', 'inbox', 'tasks', 'dashboard', ...GARDEN_MODULE_KEYS];
 
 /**
  * Landing path after auth: first matching module key → MODULE_HOME.
