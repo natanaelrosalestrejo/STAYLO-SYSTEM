@@ -251,6 +251,7 @@ class PropertyModel(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     tenant_id: Optional[str] = None
+    associated_property_ids: List[str] = []  # bidirectional hotel-garden links
     feature_toggles: dict = Field(
         default_factory=lambda: {
             "inbox": True,
@@ -270,6 +271,7 @@ class PropertyCreate(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     tenant_id: Optional[str] = None
+    associated_property_ids: List[str] = []
 
 
 class EventSpaceModel(BaseModel):
@@ -479,6 +481,182 @@ class AmenityCreate(BaseModel):
     icon: Optional[str] = None
 
 
+# ----- Vendor (Proveedor de Jardín) -----
+class VendorModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    property_id: str
+    name: str
+    category: str  # musica_dj | fotografia_video | pasteleria | audio_sonido | flores_decoracion | mobiliario_renta | snacks_catering | camara_360 | entretenimiento | otros
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    price_info: Optional[str] = None
+    images: List[str] = []
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+    status: str = "active"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorCreate(BaseModel):
+    property_id: str
+    name: str
+    category: str
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    price_info: Optional[str] = None
+    images: List[str] = []
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+
+
+class VendorUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    contact_name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    description: Optional[str] = None
+    price_info: Optional[str] = None
+    images: Optional[List[str]] = None
+    rating: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+
+# ----- Garden Inventory (Inventario del Jardín) -----
+class GardenInventoryItemModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    property_id: str
+    name: str
+    category: str  # sillas | mesas | manteles | iluminacion | decoracion | audio_visual | vajilla | carpas | otros
+    description: Optional[str] = None
+    quantity_total: int = 0
+    quantity_available: int = 0
+    unit_price_rent: float = 0.0
+    images: List[str] = []
+    condition: str = "buena"  # excelente | buena | regular | baja
+    status: str = "active"
+    notes: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class GardenInventoryItemCreate(BaseModel):
+    property_id: str
+    name: str
+    category: str
+    description: Optional[str] = None
+    quantity_total: int = 0
+    quantity_available: int = 0
+    unit_price_rent: float = 0.0
+    images: List[str] = []
+    condition: str = "buena"
+    notes: Optional[str] = None
+
+
+class GardenInventoryItemUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    quantity_total: Optional[int] = None
+    quantity_available: Optional[int] = None
+    unit_price_rent: Optional[float] = None
+    images: Optional[List[str]] = None
+    condition: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+# ----- Garden Visits (Citas del Jardín) -----
+class GardenVisitModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    property_id: str
+    visit_type: str  # cliente | proveedor | degustacion | decoracion | fotografia | tour | otro
+    client_name: str
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+    vendor_id: Optional[str] = None
+    vendor_name: Optional[str] = None
+    visit_date: str
+    duration_minutes: int = 60
+    status: str = "scheduled"  # scheduled | completed | cancelled | no_show
+    notes: Optional[str] = None
+    created_by: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class GardenVisitCreate(BaseModel):
+    property_id: str
+    visit_type: str
+    client_name: str
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+    vendor_id: Optional[str] = None
+    vendor_name: Optional[str] = None
+    visit_date: str
+    duration_minutes: int = 60
+    notes: Optional[str] = None
+
+
+class GardenVisitUpdate(BaseModel):
+    visit_type: Optional[str] = None
+    client_name: Optional[str] = None
+    client_phone: Optional[str] = None
+    client_email: Optional[str] = None
+    vendor_id: Optional[str] = None
+    vendor_name: Optional[str] = None
+    visit_date: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+
+# ----- Restaurant Meal Orders -----
+class RestaurantMealOrderModel(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    property_id: str
+    reservation_id: Optional[str] = None
+    guest_id: Optional[str] = None
+    guest_name: str
+    room_number: Optional[str] = None
+    meal_type: str  # desayuno | almuerzo | comida | cena
+    meal_date: str  # YYYY-MM-DD
+    plates: int = 1
+    status: str = "ordered"  # ordered | served | cancelled
+    amount: float = 0.0
+    notes: Optional[str] = None
+    created_by: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class RestaurantMealOrderCreate(BaseModel):
+    property_id: str
+    reservation_id: Optional[str] = None
+    guest_id: Optional[str] = None
+    guest_name: str
+    room_number: Optional[str] = None
+    meal_type: str
+    meal_date: str
+    plates: int = 1
+    amount: float = 0.0
+    notes: Optional[str] = None
+
+
+class RestaurantMealOrderUpdate(BaseModel):
+    meal_type: Optional[str] = None
+    meal_date: Optional[str] = None
+    plates: Optional[int] = None
+    status: Optional[str] = None
+    amount: Optional[float] = None
+    notes: Optional[str] = None
+
+
 # Manager = primary hotel/group operational role (absorbs former business "admin").
 _MANAGER_DEFAULT_MODULES = [
     "corporate",
@@ -490,6 +668,7 @@ _MANAGER_DEFAULT_MODULES = [
     "guests",
     "jardines",
     "hotel-events",
+    "restaurant",
     "inbox",
     "tasks",
     "catalog",
@@ -512,6 +691,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "guests",
         "jardines",
         "hotel-events",
+        "restaurant",
         "catalog",
     ],
     "manager": list(_MANAGER_DEFAULT_MODULES),
@@ -530,7 +710,7 @@ DEFAULT_ROLE_PERMISSIONS = {
     "housekeeping": ["inbox", "tasks"],
     "maintenance": ["inbox", "tasks"],
     "security": ["inbox", "tasks"],
-    "restaurant": ["inbox", "tasks"],
+    "restaurant": ["inbox", "tasks", "restaurant"],
     "garden_admin": [
         "garden_dashboard",
         "garden_event_bookings",
@@ -538,6 +718,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "garden_lodging_integration",
         "garden_guest_list",
         "garden_sales",
+        "garden_vendors",
+        "garden_inventory",
+        "garden_visits",
         "inbox",
         "tasks",
         "reports",
@@ -549,6 +732,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "garden_event_spaces",
         "garden_lodging_integration",
         "garden_guest_list",
+        "garden_vendors",
+        "garden_inventory",
+        "garden_visits",
         "inbox",
         "tasks",
         "reports",
@@ -559,6 +745,8 @@ DEFAULT_ROLE_PERMISSIONS = {
         "garden_event_bookings",
         "garden_guest_list",
         "garden_sales",
+        "garden_vendors",
+        "garden_inventory",
         "inbox",
         "tasks",
         "reports",
@@ -566,6 +754,7 @@ DEFAULT_ROLE_PERMISSIONS = {
     "garden_reception": [
         "garden_guest_list",
         "garden_event_bookings",
+        "garden_visits",
         "inbox",
         "tasks",
     ],

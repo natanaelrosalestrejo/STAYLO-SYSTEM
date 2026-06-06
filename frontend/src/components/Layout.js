@@ -10,7 +10,7 @@ import {
   LayoutDashboard, CalendarCheck, BedDouble, Users, Inbox,
   CheckSquare, BarChart3, UserCog, LogOut, Bell, Menu, BookOpen,
   Building2, Sparkles, ChevronDown, Globe2, Settings, Shield, Layers,
-  CalendarDays, Calendar, Cpu, CreditCard
+  CalendarDays, Calendar, Cpu, CreditCard, Utensils
 } from 'lucide-react';
 
 const navItems = [
@@ -33,6 +33,7 @@ const navItems = [
   { to: '/guests', icon: Users, label: 'Huéspedes', roles: ['receptionist', 'sales', 'manager', 'owner'] },
   { to: '/jardines', icon: Sparkles, label: 'Eventos en jardines', roles: ['manager', 'owner'] },
   { to: '/hotel-events', icon: CalendarDays, label: 'Eventos Hotel', roles: ['sales', 'manager', 'owner'] },
+  { to: '/restaurant', icon: Utensils, label: 'Restaurante', roles: ['restaurant', 'receptionist', 'sales', 'manager', 'owner'] },
   // Shared modules
   { to: '/inbox', icon: Inbox, label: 'Inbox', roles: ['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },
   { to: '/tasks', icon: CheckSquare, label: 'Tareas', roles: ['receptionist', 'sales', 'housekeeping', 'maintenance', 'security', 'restaurant', 'manager'] },

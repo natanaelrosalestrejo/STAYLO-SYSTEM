@@ -27,6 +27,7 @@ import PropertyManagement from "./pages/PropertyManagement";
 import PlatformAdmin from "./pages/PlatformAdmin";
 import HotelEvents from "./pages/HotelEvents";
 import RoomTypes from "./pages/RoomTypes";
+import Restaurant from "./pages/Restaurant";
 import { canAccessRoute, getDefaultPathForRole } from "./utils/permissions";
 
 function hasEffectiveModules(user) {
@@ -100,6 +101,7 @@ function AppRoutes() {
       <Route path="/guests" element={<ProtectedRoute allowedRoles={['receptionist','sales','manager','owner']}><Guests /></ProtectedRoute>} />
       <Route path="/jardines" element={<ProtectedRoute allowedRoles={['manager','owner']}><EventGarden /></ProtectedRoute>} />
       <Route path="/hotel-events" element={<ProtectedRoute allowedRoles={['sales','manager','owner']}><HotelEvents /></ProtectedRoute>} />
+      <Route path="/restaurant" element={<ProtectedRoute allowedRoles={['restaurant','receptionist','sales','manager','owner']}><Restaurant /></ProtectedRoute>} />
       <Route path="/room-types" element={<ProtectedRoute allowedRoles={['manager']}><RoomTypes /></ProtectedRoute>} />
       <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
       <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
